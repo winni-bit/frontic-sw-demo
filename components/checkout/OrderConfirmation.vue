@@ -15,6 +15,34 @@ interface Props {
 
 const props = defineProps<Props>()
 
+// Get the current shop layout to determine correct links
+const { getLayout } = useShopLayout()
+const currentLayout = getLayout()
+
+// Determine the correct "continue shopping" link based on layout
+const continueShoppingLink = computed(() => {
+  switch (currentLayout) {
+    case 'furniture':
+      return '/furniture/all'
+    case 'industry':
+      return '/industry/all'
+    default:
+      return '/'
+  }
+})
+
+// Determine button color based on layout
+const buttonClass = computed(() => {
+  switch (currentLayout) {
+    case 'furniture':
+      return 'bg-amber-600 hover:bg-amber-700'
+    case 'industry':
+      return 'bg-blue-600 hover:bg-blue-700'
+    default:
+      return 'bg-stone-900 hover:bg-stone-800'
+  }
+})
+
 // Format price
 const formatPrice = (price: number, currency: string = 'EUR') => {
   return new Intl.NumberFormat('de-DE', {
@@ -220,8 +248,11 @@ const currencySymbol = computed(() => {
     <!-- Continue Shopping -->
     <div class="text-center">
       <NuxtLink
-        to="/products"
-        class="inline-block px-8 py-4 bg-stone-900 text-white text-sm font-medium uppercase tracking-wider hover:bg-stone-800 transition-colors"
+        :to="continueShoppingLink"
+        :class="[
+          'inline-block px-8 py-4 text-white text-sm font-medium uppercase tracking-wider transition-colors',
+          buttonClass
+        ]"
       >
         Weiter einkaufen
       </NuxtLink>
@@ -238,8 +269,11 @@ const currencySymbol = computed(() => {
       Die Bestelldaten konnten nicht geladen werden.
     </p>
     <NuxtLink
-      to="/"
-      class="inline-block px-6 py-3 bg-stone-900 text-white text-sm font-medium hover:bg-stone-800 transition-colors"
+      :to="continueShoppingLink"
+      :class="[
+        'inline-block px-6 py-3 text-white text-sm font-medium transition-colors',
+        buttonClass
+      ]"
     >
       Zur Startseite
     </NuxtLink>

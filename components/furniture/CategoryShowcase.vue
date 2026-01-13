@@ -40,14 +40,11 @@
           <!-- Content -->
           <div class="absolute inset-0 flex flex-col justify-end p-8 z-20">
             <div class="transform group-hover:-translate-y-2 transition-transform duration-500">
-              <p class="text-amber-400 text-sm font-medium tracking-wider uppercase mb-2">
-                {{ livingRoomCount }}+ Pieces
-              </p>
               <h3 class="font-serif text-3xl lg:text-4xl text-white mb-3">
                 Living Room
               </h3>
               <p class="text-stone-200 mb-4 max-w-sm">
-                Sofas, armchairs, and accent pieces for your perfect gathering space.
+                Sofas, armchairs, and accent furniture for your perfect gathering space.
               </p>
               <span class="inline-flex items-center gap-2 text-white font-medium group-hover:gap-4 transition-all">
                 Explore Collection
@@ -77,9 +74,6 @@
           <!-- Content -->
           <div class="absolute inset-0 flex flex-col justify-end p-8 z-20">
             <div class="transform group-hover:-translate-y-2 transition-transform duration-500">
-              <p class="text-amber-400 text-sm font-medium tracking-wider uppercase mb-2">
-                {{ bedroomCount }}+ Pieces
-              </p>
               <h3 class="font-serif text-3xl lg:text-4xl text-white mb-3">
                 Bedroom
               </h3>
@@ -123,8 +117,6 @@ const BEDROOM_KEY = '0195607c69c77dd4b42ba8f8c7fb1bfe'
 const loading = ref(true)
 const livingRoomImage = ref<string>('')
 const bedroomImage = ref<string>('')
-const livingRoomCount = ref(13)
-const bedroomCount = ref(9)
 
 const fetchCategoryData = async () => {
   try {
@@ -143,7 +135,6 @@ const fetchCategoryData = async () => {
       if (productWithImage?.cover?.src) {
         livingRoomImage.value = productWithImage.cover.src
       }
-      livingRoomCount.value = livingRoomResponse.total || 13
     }
 
     // Fetch Bedroom products
@@ -160,7 +151,6 @@ const fetchCategoryData = async () => {
       if (productWithImage?.cover?.src) {
         bedroomImage.value = productWithImage.cover.src
       }
-      bedroomCount.value = bedroomResponse.total || 9
     }
   } catch (error) {
     console.error('Error fetching category data:', error)

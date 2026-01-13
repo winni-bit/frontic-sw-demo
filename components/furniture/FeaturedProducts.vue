@@ -8,14 +8,14 @@
             Handpicked For You
           </p>
           <h2 class="font-serif text-4xl lg:text-5xl text-stone-900">
-            Featured Pieces
+            Featured Collection
           </h2>
         </div>
         
         <div class="flex items-center gap-4">
           <button 
             @click="scrollProducts('left')"
-            class="w-12 h-12 border border-stone-200 hover:border-stone-900 flex items-center justify-center transition-colors"
+            class="w-12 h-12 border border-stone-200 hover:border-amber-600 hover:text-amber-600 flex items-center justify-center transition-colors"
             :class="{ 'opacity-50 cursor-not-allowed': !canScrollLeft }"
             :disabled="!canScrollLeft"
           >
@@ -25,7 +25,7 @@
           </button>
           <button 
             @click="scrollProducts('right')"
-            class="w-12 h-12 border border-stone-200 hover:border-stone-900 flex items-center justify-center transition-colors"
+            class="w-12 h-12 border border-stone-200 hover:border-amber-600 hover:text-amber-600 flex items-center justify-center transition-colors"
             :class="{ 'opacity-50 cursor-not-allowed': !canScrollRight }"
             :disabled="!canScrollRight"
           >
@@ -55,7 +55,7 @@
       <div class="text-center mt-12">
         <NuxtLink 
           to="/furniture/all"
-          class="inline-flex items-center gap-3 bg-stone-900 hover:bg-stone-800 text-white px-8 py-4 font-medium transition-all duration-300 group"
+          class="inline-flex items-center gap-3 bg-amber-600 hover:bg-amber-700 text-white px-8 py-4 font-medium transition-all duration-300 group"
         >
           View All Products
           <svg class="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -68,25 +68,8 @@
 </template>
 
 <script setup lang="ts">
-interface Product {
-  key: string
-  name: string
-  cover?: {
-    src?: string
-    thumbnailSrc?: string
-    altText?: string
-  }
-  price?: {
-    amount: number
-    currency: string
-    precision: number
-    ref?: number
-  }
-  categoryIds?: string[]
-}
-
 defineProps<{
-  products: Product[]
+  products: FurnitureProductCard[]
 }>()
 
 const carouselRef = ref<HTMLElement | null>(null)

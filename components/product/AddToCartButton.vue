@@ -84,9 +84,9 @@ const buttonClasses = computed(() => {
   const base = 'font-medium uppercase tracking-wider transition-all flex items-center justify-center gap-2'
   
   const variants = {
-    primary: 'bg-stone-900 text-white hover:bg-stone-800 disabled:bg-stone-200 disabled:text-stone-400',
+    primary: 'bg-amber-600 text-white hover:bg-amber-700 disabled:bg-stone-200 disabled:text-stone-400',
     secondary: 'bg-amber-600 text-white hover:bg-amber-700 disabled:bg-stone-200 disabled:text-stone-400',
-    outline: 'border-2 border-stone-900 text-stone-900 hover:bg-stone-900 hover:text-white disabled:border-stone-200 disabled:text-stone-400',
+    outline: 'border-2 border-amber-600 text-amber-700 hover:bg-amber-600 hover:text-white disabled:border-stone-200 disabled:text-stone-400',
   }
   
   const sizes = {

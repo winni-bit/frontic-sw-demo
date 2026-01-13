@@ -150,7 +150,7 @@ const lineItems = computed(() => cart.value?.lineItems || [])
     >
       <div
         v-if="open"
-        class="fixed inset-0 bg-black/50 z-50"
+        class="fixed inset-0 bg-black/50 z-[60]"
         @click="emit('close')"
       />
     </Transition>
@@ -166,7 +166,7 @@ const lineItems = computed(() => cart.value?.lineItems || [])
     >
       <div
         v-if="open"
-        class="fixed top-0 right-0 bottom-0 w-full max-w-md bg-white z-50 flex flex-col shadow-2xl"
+        class="fixed top-0 right-0 bottom-0 w-full max-w-md bg-white z-[70] flex flex-col shadow-2xl"
       >
         <!-- Header -->
         <div class="flex items-center justify-between px-6 py-4 border-b border-stone-100">
@@ -201,7 +201,7 @@ const lineItems = computed(() => cart.value?.lineItems || [])
             <p class="text-sm text-stone-400">Fügen Sie Produkte hinzu, um fortzufahren</p>
             <button
               @click="emit('close')"
-              class="mt-6 px-6 py-3 text-sm font-medium text-stone-900 border border-stone-200 hover:border-stone-300 transition-colors"
+              class="mt-6 px-6 py-3 text-sm font-medium text-amber-700 border border-amber-600 hover:bg-amber-600 hover:text-white transition-colors"
             >
               Weiter einkaufen
             </button>
@@ -321,7 +321,7 @@ const lineItems = computed(() => cart.value?.lineItems || [])
               'w-full py-4 text-sm font-medium uppercase tracking-wider transition-all',
               loading
                 ? 'bg-stone-200 text-stone-400 cursor-not-allowed'
-                : 'bg-stone-900 text-white hover:bg-stone-800'
+                : 'bg-amber-600 text-white hover:bg-amber-700'
             ]"
           >
             <span v-if="loading" class="flex items-center justify-center gap-2">
@@ -337,7 +337,7 @@ const lineItems = computed(() => cart.value?.lineItems || [])
           <!-- Continue Shopping -->
           <button
             @click="emit('close')"
-            class="w-full py-3 text-sm text-stone-500 hover:text-stone-900 transition-colors"
+            class="w-full py-3 text-sm text-stone-500 hover:text-amber-700 transition-colors"
           >
             Weiter einkaufen
           </button>

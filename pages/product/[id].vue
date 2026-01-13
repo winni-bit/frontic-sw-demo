@@ -29,39 +29,45 @@
     <template v-else-if="product">
       <div class="py-8">
         <div class="max-w-7xl mx-auto px-6">
-          <!-- Breadcrumb -->
-          <nav class="mb-8">
-            <ol class="flex items-center gap-2 text-sm text-stone-400">
-              <li><NuxtLink to="/" class="hover:text-stone-900 transition-colors">Furniture</NuxtLink></li>
-              <li>/</li>
-              <li class="text-stone-700">{{ product.name }}</li>
-            </ol>
-          </nav>
+          <!-- Breadcrumb with Dropdown (Furniture categories only) -->
+          <UiBreadcrumbNav :breadcrumbs="breadcrumbItems" />
 
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-16">
-            <!-- Image -->
-            <div class="aspect-square bg-stone-50 overflow-hidden">
-              <img
-                v-if="product.cover?.src"
-                :src="product.cover.src"
-                :alt="product.name"
-                class="w-full h-full object-cover"
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16">
+            <!-- Image Gallery -->
+            <div class="group">
+              <ProductImageGallery 
+                :cover="product.cover"
+                :images="productImages"
               />
-              <div 
-                v-else 
-                class="w-full h-full bg-gradient-to-br from-amber-50 to-orange-100 flex items-center justify-center"
-              >
-                <svg class="w-32 h-32 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                </svg>
-              </div>
             </div>
 
             <!-- Info -->
             <div class="py-4 lg:py-8">
+              <!-- Stock Warning Badge -->
+              <div 
+                v-if="showLowStockWarning" 
+                class="inline-flex items-center gap-2 bg-amber-100 text-amber-800 text-sm px-3 py-2 mb-4"
+              >
+                <svg class="w-4 h-4 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                </svg>
+                <span>Only <strong>{{ productStock }}</strong> left in stock - order soon!</span>
+              </div>
+
+              <!-- Out of Stock Badge -->
+              <div 
+                v-else-if="isOutOfStock" 
+                class="inline-flex items-center gap-2 bg-stone-100 text-stone-600 text-sm px-3 py-2 mb-4"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+                <span>Currently out of stock</span>
+              </div>
+
               <!-- Sale Badge -->
-              <div v-if="hasDiscount" class="inline-block bg-rose-500 text-white text-xs font-medium px-3 py-1 mb-4">
-                On Sale
+              <div v-else-if="hasDiscount" class="inline-block bg-rose-500 text-white text-xs font-medium px-3 py-1 mb-4">
+                On Sale - Save {{ discountPercentage }}%
               </div>
               
               <!-- Name -->
@@ -87,12 +93,13 @@
               </div>
 
               <!-- Add to Cart with Shopware Integration -->
-              <div class="mb-8">
+              <div id="add-to-cart-trigger" class="mb-8">
                 <div class="flex items-start gap-4">
                   <div class="flex-1">
                     <ProductAddToCartButton
                       :product-id="productId"
                       :product-name="product.name"
+                      :disabled="isOutOfStock"
                       variant="secondary"
                       size="lg"
                       @added="handleAddedToCart"
@@ -139,7 +146,7 @@
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                     </svg>
-                    Zum Warenkorb hinzugefügt
+                    Added to cart successfully
                   </p>
                 </Transition>
                 
@@ -181,6 +188,12 @@
                   </svg>
                   <span class="text-stone-600">2-year warranty included</span>
                 </div>
+                <div v-if="productStock !== undefined && productStock > 0" class="flex items-center gap-3 text-sm">
+                  <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span class="text-stone-600">In stock - Ready to ship</span>
+                </div>
               </div>
             </div>
           </div>
@@ -200,7 +213,23 @@
           </div>
         </div>
       </section>
+
+      <!-- Sticky Add to Cart (Mobile) -->
+      <ProductStickyAddToCart 
+        :product="{
+          key: product.key,
+          name: product.name,
+          cover: product.cover,
+          price: product.price,
+          stock: productStock
+        }"
+        trigger-element-id="add-to-cart-trigger"
+        @added="handleAddedToCart"
+      />
     </template>
+
+    <!-- Exit Intent Popup -->
+    <CartExitIntentPopup />
   </div>
 </template>
 
@@ -211,6 +240,7 @@ definePageMeta({
   layout: 'furniture'
 })
 
+// Furniture parent category key - used to filter categories
 const FURNITURE_KEY = '019560702a3d71319d2544ae6a175c2c'
 
 const route = useRoute()
@@ -219,8 +249,11 @@ const productId = computed(() => route.params.id as string)
 // Like list composable
 const { isLiked, toggleLike } = useLikeList()
 
-const product = ref<any>(null)
-const relatedProducts = ref<any[]>([])
+const product = ref<ProductDetail | null>(null)
+const productStock = ref<number | undefined>(undefined)
+const productImages = ref<Media[]>([])
+const relatedProducts = ref<FurnitureProductCard[]>([])
+const furnitureCategories = ref<CategoryCard[]>([])
 const loading = ref(true)
 const error = ref(false)
 const showLikeFeedback = ref(false)
@@ -232,8 +265,22 @@ const productIsLiked = computed(() => {
   return isLiked(product.value.key)
 })
 
+// Stock checks
+const isOutOfStock = computed(() => {
+  return productStock.value !== undefined && productStock.value <= 0
+})
+
+const showLowStockWarning = computed(() => {
+  return productStock.value !== undefined && productStock.value > 0 && productStock.value <= 5
+})
+
 const hasDiscount = computed(() => {
   return product.value?.price?.ref && product.value.price.ref > (product.value.price.amount || 0)
+})
+
+const discountPercentage = computed(() => {
+  if (!hasDiscount.value || !product.value?.price?.ref || !product.value?.price?.amount) return 0
+  return Math.round(((product.value.price.ref - product.value.price.amount) / product.value.price.ref) * 100)
 })
 
 const formattedPrice = computed(() => {
@@ -254,6 +301,35 @@ const formattedRefPrice = computed(() => {
   }).format(amount)
 })
 
+// Breadcrumb items with siblings for dropdown - ONLY Furniture categories
+const breadcrumbItems = computed(() => {
+  // Build siblings list from furniture categories
+  const categorySiblings = furnitureCategories.value
+    .filter(cat => cat.title) // Only categories with titles
+    .map(cat => ({
+      label: cat.title || '',
+      href: `/category/${cat.slug || cat.key}`
+    }))
+
+  const items = [
+    { 
+      label: 'Furniture', 
+      href: '/furniture/all',
+      siblings: categorySiblings
+    }
+  ]
+  
+  if (product.value?.name) {
+    items.push({
+      label: product.value.name,
+      href: `/product/${product.value.key}`,
+      siblings: []
+    })
+  }
+  
+  return items
+})
+
 // Handle like toggle with feedback
 const handleToggleLike = () => {
   if (!product.value) return
@@ -264,7 +340,6 @@ const handleToggleLike = () => {
     key: product.value.key,
     name: product.value.name,
     price: product.value.price,
-    lowestPrice: product.value.lowestPrice,
     cover: product.value.cover
   })
   
@@ -278,8 +353,8 @@ const handleToggleLike = () => {
 }
 
 // Handle added to cart
-const handleAddedToCart = (productId: string, quantity: number) => {
-  console.log('Product added to cart:', productId, quantity)
+const handleAddedToCart = (productIdVal: string, quantity: number) => {
+  console.log('Product added to cart:', productIdVal, quantity)
   showCartFeedback.value = true
   setTimeout(() => {
     showCartFeedback.value = false
@@ -296,8 +371,20 @@ const fetchProduct = async () => {
     loading.value = true
     error.value = false
     console.log('Fetching product:', productId.value)
+    
+    // Fetch basic product detail
     product.value = await client.block('ProductDetail', productId.value)
     console.log('Product loaded:', product.value)
+    
+    // Try to get stock from FurnitureProductCard which has stock
+    try {
+      const detailedProduct = await client.block('FurnitureProductCard', productId.value)
+      productStock.value = detailedProduct.stock
+      console.log('Product stock:', productStock.value)
+    } catch (stockErr) {
+      console.log('Could not fetch stock info')
+      productStock.value = undefined
+    }
   } catch (err) {
     console.error('Error fetching product:', err)
     error.value = true
@@ -308,17 +395,45 @@ const fetchProduct = async () => {
 
 const fetchRelatedProducts = async () => {
   try {
-    const response = await client.listing('CategoryProducts', {
+    const response = await client.listing('FurnitureProducts', {
       categoryId: FURNITURE_KEY
     }, {
       query: { limit: 5 }
     })
     // Filter out current product and take 4
     relatedProducts.value = (response.items || [])
-      .filter((p: any) => p.key !== productId.value)
+      .filter((p: FurnitureProductCard) => p.key !== productId.value)
       .slice(0, 4)
   } catch (err) {
     console.error('Error fetching related products:', err)
+  }
+}
+
+// Fetch ONLY Furniture categories (filter by breadcrumb containing "Furniture")
+const fetchFurnitureCategories = async () => {
+  try {
+    const response = await client.listing('AllCategories', {}, {
+      query: { limit: 50 }
+    })
+    
+    console.log('All categories response:', response.items?.length, 'items')
+    
+    // Filter to only include Furniture categories (breadcrumb starts with "Furniture")
+    // Also exclude the root "Furniture" category itself (level 1)
+    furnitureCategories.value = (response.items || []).filter((cat) => {
+      const breadcrumb = cat.breadcrumb
+      // Check if the breadcrumb array exists and starts with "Furniture"
+      if (Array.isArray(breadcrumb) && breadcrumb.length > 0) {
+        const isFurniture = breadcrumb[0] === 'Furniture'
+        const isNotRoot = (cat.level || 0) > 1 // Exclude root category
+        return isFurniture && isNotRoot
+      }
+      return false
+    })
+    
+    console.log('Furniture categories loaded:', furnitureCategories.value.length, furnitureCategories.value.map(c => c.title))
+  } catch (err) {
+    console.error('Error fetching categories:', err)
   }
 }
 
@@ -326,7 +441,10 @@ const fetchRelatedProducts = async () => {
 const init = async () => {
   await fetchProduct()
   if (!error.value) {
-    await fetchRelatedProducts()
+    await Promise.all([
+      fetchRelatedProducts(),
+      fetchFurnitureCategories()
+    ])
   }
 }
 

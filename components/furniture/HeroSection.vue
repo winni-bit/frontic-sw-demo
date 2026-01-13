@@ -31,7 +31,7 @@
           <div class="flex flex-wrap gap-4">
             <NuxtLink 
               to="#collections"
-              class="inline-flex items-center gap-3 bg-stone-900 hover:bg-stone-800 text-white px-8 py-4 font-medium transition-all duration-300 group"
+              class="inline-flex items-center gap-3 bg-amber-600 hover:bg-amber-700 text-white px-8 py-4 font-medium transition-all duration-300 group"
             >
               Explore Collections
               <svg class="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -41,7 +41,7 @@
             
             <button 
               @click="openVideoOverlay"
-              class="inline-flex items-center gap-3 border border-stone-300 hover:border-stone-900 text-stone-700 px-8 py-4 font-medium transition-all duration-300"
+              class="inline-flex items-center gap-3 border border-amber-600 hover:bg-amber-600 text-amber-700 hover:text-white px-8 py-4 font-medium transition-all duration-300"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />

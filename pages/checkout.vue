@@ -1,14 +1,12 @@
 <script setup lang="ts">
 /**
- * OnePage Guest Checkout
+ * OnePage Guest Checkout - Optimized for Conversion
  * 
  * All checkout steps visible on one page:
- * - Address Form
+ * - Address Form with inline validation
  * - Shipping Method Selection
  * - Payment Method Selection
- * - Order Summary & Place Order
- * 
- * Uses the same layout as the shop the user came from
+ * - Editable Order Summary & Place Order
  */
 
 // Get the current shop layout
@@ -16,7 +14,7 @@ const { getLayout } = useShopLayout()
 const currentLayout = getLayout()
 
 definePageMeta({
-  layout: false, // We'll set layout dynamically
+  layout: false,
 })
 
 useHead({
@@ -52,7 +50,21 @@ const {
   registerGuest,
   placeOrder,
   fetchContext,
+  updateQuantity,
+  removeFromCart,
 } = useShopwareCart()
+
+// Determine the correct products page based on layout
+const productsPagePath = computed(() => {
+  switch (currentLayout) {
+    case 'furniture':
+      return '/furniture/all'
+    case 'industry':
+      return '/industry/all'
+    default:
+      return '/'
+  }
+})
 
 // Form state
 const formData = reactive<CheckoutFormData>({
@@ -79,12 +91,61 @@ const updatingShipping = ref(false)
 const updatingPayment = ref(false)
 const isGuestRegistered = ref(false)
 const orderStep = ref<'idle' | 'registering' | 'placing'>('idle')
+const updatingItems = ref<Set<string>>(new Set())
 
 // Line items
 const lineItems = computed(() => cart.value?.lineItems || [])
 
 // Taxes
 const taxes = computed(() => cart.value?.price?.calculatedTaxes || [])
+
+// Free shipping threshold
+const FREE_SHIPPING_THRESHOLD = 50
+const amountToFreeShipping = computed(() => {
+  const remaining = FREE_SHIPPING_THRESHOLD - subtotal.value
+  return remaining > 0 ? remaining : 0
+})
+
+// Progress calculation based on completed steps (not field count)
+const completedSteps = computed(() => {
+  let steps = 0
+  const totalSteps = 3 // Address, Shipping, Payment
+  
+  // Step 1: Address complete?
+  const hasEmail = !!formData.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)
+  const hasFirstName = !!formData.firstName?.trim()
+  const hasLastName = !!formData.lastName?.trim()
+  const hasStreet = !!formData.street?.trim()
+  const hasZipcode = !!formData.zipcode?.trim()
+  const hasCity = !!formData.city?.trim()
+  const hasCountry = !!formData.countryId
+  
+  if (hasEmail && hasFirstName && hasLastName && hasStreet && hasZipcode && hasCity && hasCountry) {
+    steps = 1
+  }
+  
+  // Step 2: Shipping selected?
+  if (steps >= 1 && selectedShippingMethodId.value) {
+    steps = 2
+  }
+  
+  // Step 3: Payment selected?
+  if (steps >= 2 && selectedPaymentMethodId.value) {
+    steps = 3
+  }
+  
+  return steps
+})
+
+// Progress percentage - based on steps, capped at 100%
+const progressPercentage = computed(() => {
+  return Math.min(Math.round((completedSteps.value / 3) * 100), 100)
+})
+
+// Free shipping progress - capped at 100%
+const freeShippingProgress = computed(() => {
+  return Math.min((subtotal.value / FREE_SHIPPING_THRESHOLD) * 100, 100)
+})
 
 // Format price
 const formatPrice = (price: number) => {
@@ -99,34 +160,46 @@ const getItemImage = (item: ShopwareLineItem) => {
   return item.cover?.url || null
 }
 
-// Validate form
-const validateForm = (): boolean => {
-  Object.keys(errors).forEach(key => delete errors[key])
-
+// Inline validation for email
+const validateEmail = () => {
   if (!formData.email) {
     errors.email = 'E-Mail ist erforderlich'
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
     errors.email = 'Ungültige E-Mail-Adresse'
+  } else {
+    delete errors.email
   }
+}
 
-  if (!formData.firstName?.trim()) {
-    errors.firstName = 'Vorname ist erforderlich'
+// Inline validation for required fields
+const validateField = (fieldName: string) => {
+  const value = formData[fieldName as keyof typeof formData]
+  if (!value || (typeof value === 'string' && !value.trim())) {
+    const fieldLabels: Record<string, string> = {
+      firstName: 'Vorname',
+      lastName: 'Nachname',
+      street: 'Straße',
+      zipcode: 'PLZ',
+      city: 'Stadt',
+      countryId: 'Land',
+    }
+    errors[fieldName] = `${fieldLabels[fieldName] || fieldName} ist erforderlich`
+  } else {
+    delete errors[fieldName]
   }
-  if (!formData.lastName?.trim()) {
-    errors.lastName = 'Nachname ist erforderlich'
-  }
-  if (!formData.street?.trim()) {
-    errors.street = 'Straße ist erforderlich'
-  }
-  if (!formData.zipcode?.trim()) {
-    errors.zipcode = 'PLZ ist erforderlich'
-  }
-  if (!formData.city?.trim()) {
-    errors.city = 'Stadt ist erforderlich'
-  }
-  if (!formData.countryId) {
-    errors.countryId = 'Land ist erforderlich'
-  }
+}
+
+// Full form validation
+const validateForm = (): boolean => {
+  Object.keys(errors).forEach(key => delete errors[key])
+
+  validateEmail()
+  validateField('firstName')
+  validateField('lastName')
+  validateField('street')
+  validateField('zipcode')
+  validateField('city')
+  validateField('countryId')
 
   return Object.keys(errors).length === 0
 }
@@ -143,10 +216,38 @@ const isFormComplete = computed(() => {
   const hasShipping = !!selectedShippingMethodId.value
   const hasPayment = !!selectedPaymentMethodId.value
   
-  const complete = hasEmail && hasFirstName && hasLastName && hasStreet && hasZipcode && hasCity && hasCountry && hasShipping && hasPayment
-  
-  return complete
+  return hasEmail && hasFirstName && hasLastName && hasStreet && hasZipcode && hasCity && hasCountry && hasShipping && hasPayment
 })
+
+// Handle quantity change in checkout
+const handleQuantityChange = async (item: ShopwareLineItem, newQuantity: number) => {
+  if (newQuantity < 1 || updatingItems.value.has(item.id)) return
+  
+  updatingItems.value.add(item.id)
+  
+  try {
+    await updateQuantity(item.id, newQuantity)
+  } catch (error) {
+    console.error('Error updating quantity:', error)
+  } finally {
+    updatingItems.value.delete(item.id)
+  }
+}
+
+// Handle remove item in checkout
+const handleRemoveItem = async (item: ShopwareLineItem) => {
+  if (updatingItems.value.has(item.id)) return
+  
+  updatingItems.value.add(item.id)
+  
+  try {
+    await removeFromCart(item.id)
+  } catch (error) {
+    console.error('Error removing item:', error)
+  } finally {
+    updatingItems.value.delete(item.id)
+  }
+}
 
 // Handle shipping method change
 const handleShippingChange = async (methodId: string) => {
@@ -205,7 +306,6 @@ const getPaymentIcon = (method: ShopwarePaymentMethod) => {
 // Handle place order
 const handlePlaceOrder = async () => {
   if (!validateForm()) {
-    // Scroll to first error
     const firstErrorKey = Object.keys(errors)[0]
     const errorElement = document.getElementById(firstErrorKey)
     errorElement?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -216,54 +316,28 @@ const handlePlaceOrder = async () => {
   globalError.value = null
 
   try {
-    // Step 1: Register as guest if not already registered
     if (!isGuestRegistered.value) {
       orderStep.value = 'registering'
-      console.log('[Checkout] Registering guest with data:', {
-        email: formData.email,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        street: formData.street,
-        zipcode: formData.zipcode,
-        city: formData.city,
-        countryId: formData.countryId,
-      })
       
       try {
         await registerGuest(formData)
         isGuestRegistered.value = true
-        console.log('[Checkout] Guest registration successful')
       } catch (regError: any) {
-        console.error('[Checkout] Guest registration failed:', regError)
         throw new Error(`Registrierung fehlgeschlagen: ${regError.message}`)
       }
     }
 
-    // Small delay to ensure Shopware has processed the registration
     await new Promise(resolve => setTimeout(resolve, 500))
 
-    // Step 2: Verify context has customer
-    console.log('[Checkout] Verifying customer context...')
     const context = await fetchContext()
     
     if (!context.customer) {
-      console.error('[Checkout] No customer in context after registration')
       throw new Error('Kundenregistrierung fehlgeschlagen. Bitte versuchen Sie es erneut.')
     }
-    
-    console.log('[Checkout] Customer verified:', {
-      id: context.customer.id,
-      email: context.customer.email,
-      guest: context.customer.guest,
-      billingAddressId: context.customer.defaultBillingAddressId
-    })
 
-    // Step 3: Place order
     orderStep.value = 'placing'
-    console.log('[Checkout] Placing order...')
     const order = await placeOrder()
 
-    // Save order data to sessionStorage BEFORE redirect
     if (import.meta.client) {
       const orderData: OrderConfirmationData = {
         order,
@@ -272,12 +346,10 @@ const handlePlaceOrder = async () => {
       sessionStorage.setItem('lastOrder', JSON.stringify(orderData))
     }
 
-    // Redirect to confirmation page
     router.push('/order-confirmation')
   } catch (err: any) {
     console.error('[Checkout] Error:', err)
     globalError.value = err.message || 'Es ist ein Fehler aufgetreten'
-    // Reset registration state on error so user can retry
     isGuestRegistered.value = false
     orderStep.value = 'idle'
   } finally {
@@ -286,14 +358,14 @@ const handlePlaceOrder = async () => {
   }
 }
 
-// Find shipping method by name (case-insensitive partial match)
+// Find shipping method by name
 const findShippingMethodByName = (name: string) => {
   return shippingMethods.value.find(m => 
     (m.translated?.name || m.name || '').toLowerCase().includes(name.toLowerCase())
   )
 }
 
-// Find payment method by name (case-insensitive partial match)
+// Find payment method by name
 const findPaymentMethodByName = (name: string) => {
   return paymentMethods.value.find(m => 
     (m.translated?.name || m.name || '').toLowerCase().includes(name.toLowerCase()) ||
@@ -303,13 +375,9 @@ const findPaymentMethodByName = (name: string) => {
 
 // Initialize checkout
 onMounted(async () => {
-  console.log('[Checkout] Checkout page mounted')
-  
   try {
-    // ALWAYS ensure cart is loaded when checkout page mounts
     await ensureCartLoaded()
     
-    // Load checkout data in parallel
     await Promise.all([
       fetchShippingMethods(),
       fetchPaymentMethods(),
@@ -317,12 +385,7 @@ onMounted(async () => {
       fetchSalutations(),
     ])
 
-    console.log('[Checkout] Shipping methods:', shippingMethods.value.map(m => m.translated?.name || m.name))
-    console.log('[Checkout] Payment methods:', paymentMethods.value.map(m => m.translated?.name || m.name))
-
-    // Set default salutation
     if (salutations.value.length > 0) {
-      // Prefer "not_specified" salutation
       const notSpecified = salutations.value.find(s => 
         s.salutationKey === 'not_specified' || 
         s.displayName?.toLowerCase().includes('keine')
@@ -330,7 +393,6 @@ onMounted(async () => {
       formData.salutationId = notSpecified?.id || salutations.value[0].id
     }
 
-    // Set default country (Germany if available)
     const germany = countries.value.find(c => c.iso === 'DE')
     if (germany) {
       formData.countryId = germany.id
@@ -338,33 +400,26 @@ onMounted(async () => {
       formData.countryId = countries.value[0].id
     }
 
-    // Set default shipping method: prefer "Standard"
     if (!selectedShippingMethodId.value) {
       const standardShipping = findShippingMethodByName('standard')
       if (standardShipping) {
-        console.log('[Checkout] Setting default shipping to "Standard"')
         await setShippingMethod(standardShipping.id)
       } else if (shippingMethods.value.length > 0) {
         await setShippingMethod(shippingMethods.value[0].id)
       }
     }
 
-    // Set default payment method: prefer "Invoice"
     if (!selectedPaymentMethodId.value) {
       const invoicePayment = findPaymentMethodByName('invoice')
       if (invoicePayment) {
-        console.log('[Checkout] Setting default payment to "Invoice"')
         await setPaymentMethod(invoicePayment.id)
       } else if (paymentMethods.value.length > 0) {
         await setPaymentMethod(paymentMethods.value[0].id)
       }
     }
-
-    console.log('[Checkout] Checkout initialized. Shipping:', selectedShippingMethodId.value, 'Payment:', selectedPaymentMethodId.value)
     
-    // Redirect if empty
     if (isEmpty.value) {
-      router.push('/products')
+      router.push(productsPagePath.value)
     }
   } catch (error) {
     console.error('[Checkout] Error initializing checkout:', error)
@@ -374,14 +429,13 @@ onMounted(async () => {
   }
 })
 
-// Watch for empty cart (but not during initial load)
 watch(isEmpty, (empty) => {
   if (empty && !initialLoading.value) {
-    router.push('/products')
+    router.push(productsPagePath.value)
   }
 })
 
-// Determine theme colors based on layout
+// Theme colors
 const isIndustryTheme = computed(() => currentLayout === 'industry')
 const themeColors = computed(() => {
   if (isIndustryTheme.value) {
@@ -400,6 +454,7 @@ const themeColors = computed(() => {
       accent: 'text-blue-400',
       selectedBorder: 'border-blue-500',
       selectedBg: 'bg-slate-800',
+      success: 'text-green-400',
     }
   }
   return {
@@ -412,11 +467,12 @@ const themeColors = computed(() => {
     inputBg: 'bg-white',
     inputBorder: 'border-stone-200',
     inputFocus: 'focus:ring-stone-900 focus:border-stone-900',
-    buttonPrimary: 'bg-stone-900 hover:bg-stone-800',
+    buttonPrimary: 'bg-amber-600 hover:bg-amber-700',
     buttonDisabled: 'bg-stone-200 text-stone-400',
     accent: 'text-stone-900',
     selectedBorder: 'border-stone-900',
     selectedBg: 'bg-stone-50',
+    success: 'text-green-600',
   }
 })
 </script>
@@ -425,6 +481,77 @@ const themeColors = computed(() => {
   <NuxtLayout :name="currentLayout">
     <div :class="['min-h-screen pt-24 pb-16', themeColors.bg]">
       <div class="container mx-auto px-4 lg:px-8">
+        <!-- Progress Indicator (Step-based) -->
+        <div class="max-w-3xl mx-auto mb-8">
+          <div class="flex items-center justify-between">
+            <!-- Step 1: Address -->
+            <div class="flex items-center">
+              <div 
+                :class="[
+                  'w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors',
+                  completedSteps >= 1 
+                    ? (isIndustryTheme ? 'bg-blue-600 text-white' : 'bg-stone-900 text-white')
+                    : (isIndustryTheme ? 'bg-slate-700 text-slate-400' : 'bg-stone-200 text-stone-500')
+                ]"
+              >
+                <svg v-if="completedSteps >= 1" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+                <span v-else>1</span>
+              </div>
+              <span :class="['ml-2 text-sm hidden sm:inline', completedSteps >= 1 ? themeColors.text : themeColors.textMuted]">
+                Adresse
+              </span>
+            </div>
+
+            <!-- Connector -->
+            <div :class="['flex-1 h-0.5 mx-4', completedSteps >= 2 ? (isIndustryTheme ? 'bg-blue-600' : 'bg-stone-900') : (isIndustryTheme ? 'bg-slate-700' : 'bg-stone-200')]" />
+
+            <!-- Step 2: Shipping -->
+            <div class="flex items-center">
+              <div 
+                :class="[
+                  'w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors',
+                  completedSteps >= 2 
+                    ? (isIndustryTheme ? 'bg-blue-600 text-white' : 'bg-stone-900 text-white')
+                    : (isIndustryTheme ? 'bg-slate-700 text-slate-400' : 'bg-stone-200 text-stone-500')
+                ]"
+              >
+                <svg v-if="completedSteps >= 2" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+                <span v-else>2</span>
+              </div>
+              <span :class="['ml-2 text-sm hidden sm:inline', completedSteps >= 2 ? themeColors.text : themeColors.textMuted]">
+                Versand
+              </span>
+            </div>
+
+            <!-- Connector -->
+            <div :class="['flex-1 h-0.5 mx-4', completedSteps >= 3 ? (isIndustryTheme ? 'bg-blue-600' : 'bg-stone-900') : (isIndustryTheme ? 'bg-slate-700' : 'bg-stone-200')]" />
+
+            <!-- Step 3: Payment -->
+            <div class="flex items-center">
+              <div 
+                :class="[
+                  'w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors',
+                  completedSteps >= 3 
+                    ? (isIndustryTheme ? 'bg-blue-600 text-white' : 'bg-stone-900 text-white')
+                    : (isIndustryTheme ? 'bg-slate-700 text-slate-400' : 'bg-stone-200 text-stone-500')
+                ]"
+              >
+                <svg v-if="completedSteps >= 3" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+                <span v-else>3</span>
+              </div>
+              <span :class="['ml-2 text-sm hidden sm:inline', completedSteps >= 3 ? themeColors.text : themeColors.textMuted]">
+                Zahlung
+              </span>
+            </div>
+          </div>
+        </div>
+
         <!-- Page Header -->
         <div class="mb-8">
           <h1 :class="['text-3xl font-serif mb-2', themeColors.text]">Checkout</h1>
@@ -450,7 +577,7 @@ const themeColors = computed(() => {
           <h2 :class="['text-xl font-medium mb-2', themeColors.text]">Ihr Warenkorb ist leer</h2>
           <p :class="['mb-6', themeColors.textMuted]">Fügen Sie Produkte hinzu, um fortzufahren.</p>
           <NuxtLink
-            to="/products"
+            :to="productsPagePath"
             :class="['inline-block px-6 py-3 text-white text-sm font-medium transition-colors', themeColors.buttonPrimary]"
           >
             Produkte entdecken
@@ -485,27 +612,36 @@ const themeColors = computed(() => {
               </h2>
 
               <div class="space-y-4">
-                <!-- Email -->
+                <!-- Email with inline validation -->
                 <div>
                   <label for="email" :class="['block text-sm font-medium mb-1', themeColors.text]">
                     E-Mail-Adresse *
                   </label>
-                  <input
-                    id="email"
-                    v-model="formData.email"
-                    type="email"
-                    autocomplete="email"
-                    :disabled="isProcessing"
-                    :class="[
-                      'w-full px-4 py-3 border transition-colors focus:outline-none focus:ring-2',
-                      themeColors.inputBg,
-                      errors.email ? 'border-red-500' : themeColors.inputBorder,
-                      themeColors.inputFocus,
-                      themeColors.text,
-                      isProcessing ? 'opacity-50' : ''
-                    ]"
-                    placeholder="ihre@email.de"
-                  />
+                  <div class="relative">
+                    <input
+                      id="email"
+                      v-model="formData.email"
+                      type="email"
+                      autocomplete="email"
+                      :disabled="isProcessing"
+                      @blur="validateEmail"
+                      :class="[
+                        'w-full px-4 py-3 border transition-colors focus:outline-none focus:ring-2 pr-10',
+                        themeColors.inputBg,
+                        errors.email ? 'border-red-500' : themeColors.inputBorder,
+                        themeColors.inputFocus,
+                        themeColors.text,
+                        isProcessing ? 'opacity-50' : ''
+                      ]"
+                      placeholder="ihre@email.de"
+                    />
+                    <!-- Validation indicator -->
+                    <div v-if="formData.email && !errors.email" class="absolute right-3 top-1/2 -translate-y-1/2">
+                      <svg :class="['w-5 h-5', themeColors.success]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                  </div>
                   <p v-if="errors.email" class="mt-1 text-sm text-red-500">{{ errors.email }}</p>
                 </div>
 
@@ -521,6 +657,7 @@ const themeColors = computed(() => {
                       type="text"
                       autocomplete="given-name"
                       :disabled="isProcessing"
+                      @blur="validateField('firstName')"
                       :class="[
                         'w-full px-4 py-3 border transition-colors focus:outline-none focus:ring-2',
                         themeColors.inputBg,
@@ -543,6 +680,7 @@ const themeColors = computed(() => {
                       type="text"
                       autocomplete="family-name"
                       :disabled="isProcessing"
+                      @blur="validateField('lastName')"
                       :class="[
                         'w-full px-4 py-3 border transition-colors focus:outline-none focus:ring-2',
                         themeColors.inputBg,
@@ -568,6 +706,7 @@ const themeColors = computed(() => {
                     type="text"
                     autocomplete="street-address"
                     :disabled="isProcessing"
+                    @blur="validateField('street')"
                     :class="[
                       'w-full px-4 py-3 border transition-colors focus:outline-none focus:ring-2',
                       themeColors.inputBg,
@@ -593,6 +732,7 @@ const themeColors = computed(() => {
                       type="text"
                       autocomplete="postal-code"
                       :disabled="isProcessing"
+                      @blur="validateField('zipcode')"
                       :class="[
                         'w-full px-4 py-3 border transition-colors focus:outline-none focus:ring-2',
                         themeColors.inputBg,
@@ -615,6 +755,7 @@ const themeColors = computed(() => {
                       type="text"
                       autocomplete="address-level2"
                       :disabled="isProcessing"
+                      @blur="validateField('city')"
                       :class="[
                         'w-full px-4 py-3 border transition-colors focus:outline-none focus:ring-2',
                         themeColors.inputBg,
@@ -638,6 +779,7 @@ const themeColors = computed(() => {
                     id="country"
                     v-model="formData.countryId"
                     :disabled="isProcessing"
+                    @change="validateField('countryId')"
                     :class="[
                       'w-full px-4 py-3 border transition-colors focus:outline-none focus:ring-2',
                       themeColors.inputBg,
@@ -763,7 +905,6 @@ const themeColors = computed(() => {
                       />
                     </div>
                     
-                    <!-- Payment Icon -->
                     <div :class="['w-12 h-12 flex items-center justify-center rounded shrink-0', isIndustryTheme ? 'bg-slate-800' : 'bg-stone-100']">
                       <svg v-if="getPaymentIcon(method) === 'paypal'" class="w-8 h-8 text-[#003087]" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797H9.23c-.412 0-.764.312-.832.74l-1.322 8.266z"/>
@@ -806,35 +947,95 @@ const themeColors = computed(() => {
           <div class="lg:col-span-2 mt-6 lg:mt-0">
             <div class="lg:sticky lg:top-28">
               <div :class="['p-6 shadow-sm', themeColors.cardBg]">
-                <h2 :class="['text-lg font-medium mb-6', themeColors.text]">Bestellübersicht</h2>
+                <div class="flex items-center justify-between mb-6">
+                  <h2 :class="['text-lg font-medium', themeColors.text]">Bestellübersicht</h2>
+                  <span :class="['text-sm', themeColors.textMuted]">{{ lineItems.length }} Artikel</span>
+                </div>
 
-                <!-- Cart Items -->
+                <!-- Free Shipping Progress -->
+                <div v-if="amountToFreeShipping > 0 && shippingCosts > 0" class="mb-6 p-3 rounded-lg" :class="isIndustryTheme ? 'bg-slate-800' : 'bg-amber-50'">
+                  <div class="flex items-center gap-2 mb-2">
+                    <svg :class="['w-5 h-5', isIndustryTheme ? 'text-amber-400' : 'text-amber-600']" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                    </svg>
+                    <span :class="['text-sm font-medium', isIndustryTheme ? 'text-amber-400' : 'text-amber-800']">
+                      Noch {{ formatPrice(amountToFreeShipping) }} bis kostenloser Versand!
+                    </span>
+                  </div>
+                  <div :class="['h-2 rounded-full', isIndustryTheme ? 'bg-slate-700' : 'bg-amber-200']">
+                    <div 
+                      class="h-full rounded-full transition-all duration-500"
+                      :class="isIndustryTheme ? 'bg-amber-500' : 'bg-amber-500'"
+                      :style="{ width: `${freeShippingProgress}%` }"
+                    />
+                  </div>
+                </div>
+
+                <!-- Cart Items - Editable -->
                 <div :class="['divide-y mb-6 max-h-80 overflow-y-auto', isIndustryTheme ? 'divide-slate-700' : 'divide-stone-100']">
                   <div
                     v-for="item in lineItems"
                     :key="item.id"
-                    class="py-4 flex gap-3"
+                    :class="['py-4 transition-opacity', updatingItems.has(item.id) && 'opacity-50']"
                   >
-                    <div :class="['w-16 h-16 shrink-0 overflow-hidden', isIndustryTheme ? 'bg-slate-800' : 'bg-stone-100']">
-                      <img
-                        v-if="getItemImage(item)"
-                        :src="getItemImage(item)!"
-                        :alt="item.label"
-                        class="w-full h-full object-cover"
-                      />
-                      <div v-else class="w-full h-full flex items-center justify-center">
-                        <svg :class="['w-6 h-6', themeColors.textSecondary]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                        </svg>
+                    <div class="flex gap-3">
+                      <div :class="['w-16 h-16 shrink-0 overflow-hidden', isIndustryTheme ? 'bg-slate-800' : 'bg-stone-100']">
+                        <img
+                          v-if="getItemImage(item)"
+                          :src="getItemImage(item)!"
+                          :alt="item.label"
+                          class="w-full h-full object-cover"
+                        />
+                        <div v-else class="w-full h-full flex items-center justify-center">
+                          <svg :class="['w-6 h-6', themeColors.textSecondary]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                          </svg>
+                        </div>
                       </div>
+                      <div class="flex-1 min-w-0">
+                        <p :class="['text-sm line-clamp-2 mb-2', themeColors.text]">{{ item.label }}</p>
+                        
+                        <!-- Inline Quantity Controls -->
+                        <div class="flex items-center gap-2">
+                          <div :class="['flex items-center border rounded', themeColors.border]">
+                            <button
+                              @click="handleQuantityChange(item, item.quantity - 1)"
+                              :disabled="item.quantity <= 1 || updatingItems.has(item.id)"
+                              :class="['w-7 h-7 flex items-center justify-center transition-colors disabled:opacity-30', themeColors.textMuted, 'hover:' + themeColors.text]"
+                            >
+                              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+                              </svg>
+                            </button>
+                            <span :class="['w-8 text-center text-sm', themeColors.text]">{{ item.quantity }}</span>
+                            <button
+                              @click="handleQuantityChange(item, item.quantity + 1)"
+                              :disabled="updatingItems.has(item.id)"
+                              :class="['w-7 h-7 flex items-center justify-center transition-colors disabled:opacity-30', themeColors.textMuted, 'hover:' + themeColors.text]"
+                            >
+                              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                              </svg>
+                            </button>
+                          </div>
+                          
+                          <!-- Remove Button -->
+                          <button
+                            @click="handleRemoveItem(item)"
+                            :disabled="updatingItems.has(item.id)"
+                            class="text-red-400 hover:text-red-500 transition-colors disabled:opacity-30"
+                            title="Entfernen"
+                          >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                      <p :class="['text-sm font-medium shrink-0', themeColors.text]">
+                        {{ formatPrice(item.price.totalPrice) }}
+                      </p>
                     </div>
-                    <div class="flex-1 min-w-0">
-                      <p :class="['text-sm line-clamp-2', themeColors.text]">{{ item.label }}</p>
-                      <p :class="['text-xs mt-1', themeColors.textMuted]">Menge: {{ item.quantity }}</p>
-                    </div>
-                    <p :class="['text-sm font-medium shrink-0', themeColors.text]">
-                      {{ formatPrice(item.price.totalPrice) }}
-                    </p>
                   </div>
                 </div>
 
@@ -846,7 +1047,7 @@ const themeColors = computed(() => {
                   </div>
                   <div class="flex justify-between text-sm">
                     <span :class="themeColors.textMuted">Versandkosten</span>
-                    <span :class="themeColors.text">
+                    <span :class="[themeColors.text, shippingCosts === 0 && themeColors.success]">
                       {{ shippingCosts === 0 ? 'Kostenlos' : formatPrice(shippingCosts) }}
                     </span>
                   </div>
@@ -898,7 +1099,7 @@ const themeColors = computed(() => {
 
                 <!-- Back Link -->
                 <NuxtLink
-                  to="/products"
+                  :to="productsPagePath"
                   :class="['block w-full mt-3 py-3 text-center text-sm transition-colors', themeColors.textMuted, isIndustryTheme ? 'hover:text-white' : 'hover:text-stone-900']"
                 >
                   ← Weiter einkaufen
