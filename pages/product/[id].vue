@@ -86,39 +86,24 @@
                 </p>
               </div>
 
-              <!-- Quantity & Add to Cart -->
+              <!-- Add to Cart with Shopware Integration -->
               <div class="mb-8">
-                <label class="block text-stone-700 text-sm font-medium mb-3">Quantity</label>
-                <div class="flex items-center gap-4">
-                  <div class="flex items-center border border-stone-200">
-                    <button 
-                      @click="quantity > 1 && quantity--"
-                      class="px-4 py-3 text-stone-500 hover:text-stone-900 hover:bg-stone-50 transition-colors"
-                    >
-                      −
-                    </button>
-                    <span class="w-16 text-center text-stone-900 py-3">
-                      {{ quantity }}
-                    </span>
-                    <button 
-                      @click="quantity++"
-                      class="px-4 py-3 text-stone-500 hover:text-stone-900 hover:bg-stone-50 transition-colors"
-                    >
-                      +
-                    </button>
+                <div class="flex items-start gap-4">
+                  <div class="flex-1">
+                    <ProductAddToCartButton
+                      :product-id="productId"
+                      :product-name="product.name"
+                      variant="secondary"
+                      size="lg"
+                      @added="handleAddedToCart"
+                      @error="handleCartError"
+                    />
                   </div>
-                  
-                  <button 
-                    @click="addToCart"
-                    class="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-medium py-3.5 px-8 transition-colors"
-                  >
-                    Add to Cart
-                  </button>
                   
                   <!-- Like Button -->
                   <button 
                     @click="handleToggleLike"
-                    class="p-3.5 border transition-all duration-300"
+                    class="p-4 border transition-all duration-300 shrink-0"
                     :class="[
                       productIsLiked 
                         ? 'border-rose-200 bg-rose-50 hover:bg-rose-100' 
@@ -140,6 +125,23 @@
                     </svg>
                   </button>
                 </div>
+                
+                <!-- Cart Success Feedback -->
+                <Transition
+                  enter-active-class="transition-all duration-300"
+                  enter-from-class="opacity-0 -translate-y-2"
+                  enter-to-class="opacity-100 translate-y-0"
+                  leave-active-class="transition-all duration-200"
+                  leave-from-class="opacity-100 translate-y-0"
+                  leave-to-class="opacity-0 -translate-y-2"
+                >
+                  <p v-if="showCartFeedback" class="text-sm text-green-600 mt-3 flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    Zum Warenkorb hinzugefügt
+                  </p>
+                </Transition>
                 
                 <!-- Like Feedback -->
                 <Transition
@@ -221,8 +223,8 @@ const product = ref<any>(null)
 const relatedProducts = ref<any[]>([])
 const loading = ref(true)
 const error = ref(false)
-const quantity = ref(1)
 const showLikeFeedback = ref(false)
+const showCartFeedback = ref(false)
 
 // Check if current product is liked
 const productIsLiked = computed(() => {
@@ -275,6 +277,20 @@ const handleToggleLike = () => {
   }
 }
 
+// Handle added to cart
+const handleAddedToCart = (productId: string, quantity: number) => {
+  console.log('Product added to cart:', productId, quantity)
+  showCartFeedback.value = true
+  setTimeout(() => {
+    showCartFeedback.value = false
+  }, 3000)
+}
+
+// Handle cart error
+const handleCartError = (errorMsg: string) => {
+  console.error('Cart error:', errorMsg)
+}
+
 const fetchProduct = async () => {
   try {
     loading.value = true
@@ -306,10 +322,6 @@ const fetchRelatedProducts = async () => {
   }
 }
 
-const addToCart = () => {
-  alert(`Added ${quantity.value}x ${product.value?.name} to cart!`)
-}
-
 // Initialize
 const init = async () => {
   await fetchProduct()
@@ -323,8 +335,8 @@ init()
 
 // Watch for route changes
 watch(productId, () => {
-  quantity.value = 1
   showLikeFeedback.value = false
+  showCartFeedback.value = false
   init()
 })
 </script>

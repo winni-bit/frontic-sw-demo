@@ -139,22 +139,23 @@
           </NuxtLink>
 
           <!-- Cart -->
-          <NuxtLink 
-            to="/cart" 
+          <button 
+            @click="openCartSidebar"
             class="relative transition-colors"
             :class="[scrolled ? 'text-stone-600 hover:text-stone-900' : 'text-white/80 hover:text-white']"
+            aria-label="Cart"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
             </svg>
             <span 
-              v-if="cartItemCount > 0" 
-              class="absolute -top-2 -right-2 w-5 h-5 bg-stone-900 text-white text-xs rounded-full flex items-center justify-center"
-              :class="[scrolled ? 'bg-stone-900' : 'bg-white text-stone-900']"
+              v-if="cartCount > 0" 
+              class="absolute -top-2 -right-2 w-5 h-5 text-xs rounded-full flex items-center justify-center"
+              :class="[scrolled ? 'bg-stone-900 text-white' : 'bg-white text-stone-900']"
             >
-              {{ cartItemCount }}
+              {{ cartCount }}
             </span>
-          </NuxtLink>
+          </button>
 
           <!-- Mobile Menu Toggle -->
           <button 
@@ -232,6 +233,12 @@
             >
               Wishlist
             </NuxtLink>
+            <button 
+              @click="openCartSidebar(); mobileMenuOpen = false"
+              class="block text-stone-900 text-sm tracking-wider uppercase py-2 w-full text-left"
+            >
+              Cart ({{ cartCount }})
+            </button>
             <NuxtLink 
               to="/about" 
               class="block text-stone-900 text-sm tracking-wider uppercase py-2"
@@ -379,6 +386,12 @@
         </div>
       </Transition>
     </Teleport>
+
+    <!-- Cart Sidebar -->
+    <CheckoutCartSidebar
+      :open="cartSidebarOpen"
+      @close="cartSidebarOpen = false"
+    />
   </nav>
 </template>
 
@@ -387,10 +400,15 @@ import client from '../../.frontstack/generated-client'
 
 const FURNITURE_KEY = '019560702a3d71319d2544ae6a175c2c'
 
-const { items } = useCart()
 const { likeCount } = useLikeList()
+const { itemCount, initCart } = useShopwareCart()
 
-const cartItemCount = computed(() => items.value.length)
+// Cart sidebar state
+const cartSidebarOpen = ref(false)
+
+// Use itemCount directly from composable
+const cartCount = computed(() => itemCount.value)
+
 const scrolled = ref(false)
 const mobileMenuOpen = ref(false)
 const categoriesOpen = ref(false)
@@ -406,6 +424,11 @@ const searchInputRef = ref<HTMLInputElement | null>(null)
 const searchDebounceTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 
 const popularSearches = ['Sofa', 'Chair', 'Table', 'Lamp', 'Bed', 'Storage']
+
+// Open cart sidebar
+const openCartSidebar = () => {
+  cartSidebarOpen.value = true
+}
 
 // Fetch categories for navigation
 const fetchCategories = async () => {
@@ -535,6 +558,9 @@ onMounted(() => {
   
   // Fetch categories
   fetchCategories()
+  
+  // Initialize Shopware cart
+  initCart()
   
   onUnmounted(() => {
     window.removeEventListener('scroll', handleScroll)

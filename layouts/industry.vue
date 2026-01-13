@@ -17,7 +17,7 @@
             <span class="font-bold text-lg tracking-tight">INDUSTRY</span>
           </NuxtLink>
 
-          <!-- Desktop Nav - Main Categories -->
+          <!-- Desktop Nav - Main Categories (hardcoded for reliability) -->
           <div class="hidden md:flex items-center gap-1">
             <div 
               v-for="mainCat in mainCategories" 
@@ -28,12 +28,12 @@
             >
               <!-- Category Button -->
               <NuxtLink
-                :to="`/industry/category/${mainCat.slug || mainCat.key}`"
+                :to="`/industry/category/${mainCat.slug}`"
                 class="flex items-center gap-1 px-4 py-2 text-sm text-slate-300 hover:text-white transition-colors"
               >
                 {{ mainCat.title }}
                 <svg 
-                  v-if="getSubCategories(mainCat.key).length > 0"
+                  v-if="mainCat.children && mainCat.children.length > 0"
                   class="w-3.5 h-3.5 transition-transform duration-200" 
                   :class="{ 'rotate-180': openCategory === mainCat.key }"
                   fill="none" 
@@ -54,13 +54,13 @@
                 leave-to-class="opacity-0 -translate-y-2"
               >
                 <div 
-                  v-if="openCategory === mainCat.key && getSubCategories(mainCat.key).length > 0"
+                  v-if="openCategory === mainCat.key && mainCat.children && mainCat.children.length > 0"
                   class="absolute top-full left-0 mt-1 w-56 bg-slate-900 border border-slate-700 shadow-xl py-2"
                 >
                   <NuxtLink
-                    v-for="subCat in getSubCategories(mainCat.key)"
+                    v-for="subCat in mainCat.children"
                     :key="subCat.key"
-                    :to="`/industry/category/${subCat.slug || subCat.key}`"
+                    :to="`/industry/category/${subCat.slug}`"
                     class="block px-4 py-2.5 text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
                   >
                     {{ subCat.title }}
@@ -69,7 +69,7 @@
                   <!-- View All in Category -->
                   <div class="border-t border-slate-700 mt-2 pt-2">
                     <NuxtLink
-                      :to="`/industry/category/${mainCat.slug || mainCat.key}`"
+                      :to="`/industry/category/${mainCat.slug}`"
                       class="flex items-center justify-between px-4 py-2 text-sm text-blue-400 hover:bg-slate-800 transition-colors"
                     >
                       <span>All {{ mainCat.title }}</span>
@@ -114,15 +114,21 @@
               </svg>
             </button>
             
-            <!-- Cart -->
-            <NuxtLink to="/cart" class="p-2 text-slate-400 hover:text-white transition-colors relative">
+            <!-- Cart - Opens Sidebar -->
+            <button 
+              @click="openCartSidebar"
+              class="p-2 text-slate-400 hover:text-white transition-colors relative"
+            >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
               </svg>
-              <span v-if="cartCount > 0" class="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center">
-                {{ cartCount }}
+              <span 
+                v-if="shopwareCartCount > 0" 
+                class="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center"
+              >
+                {{ shopwareCartCount > 9 ? '9+' : shopwareCartCount }}
               </span>
-            </NuxtLink>
+            </button>
 
             <!-- Mobile Menu -->
             <button 
@@ -148,24 +154,19 @@
       >
         <div v-if="mobileMenuOpen" class="md:hidden bg-slate-900 border-t border-slate-800 max-h-[80vh] overflow-y-auto">
           <div class="px-6 py-4">
-            <!-- Categories -->
-            <div v-if="categoriesLoading" class="space-y-2 py-2">
-              <div v-for="i in 3" :key="i" class="h-4 bg-slate-800 animate-pulse rounded w-32" />
-            </div>
-            
-            <div v-else class="space-y-1">
+            <div class="space-y-1">
               <div v-for="mainCat in mainCategories" :key="mainCat.key" class="border-b border-slate-800 last:border-0">
                 <!-- Main Category -->
                 <div class="flex items-center justify-between py-3">
                   <NuxtLink
-                    :to="`/industry/category/${mainCat.slug || mainCat.key}`"
+                    :to="`/industry/category/${mainCat.slug}`"
                     class="text-slate-200 font-medium"
                     @click="mobileMenuOpen = false"
                   >
                     {{ mainCat.title }}
                   </NuxtLink>
                   <button 
-                    v-if="getSubCategories(mainCat.key).length > 0"
+                    v-if="mainCat.children && mainCat.children.length > 0"
                     class="p-1 text-slate-500"
                     @click="toggleMobileCategory(mainCat.key)"
                   >
@@ -183,13 +184,13 @@
                 
                 <!-- Sub Categories -->
                 <div 
-                  v-if="expandedMobileCategories.includes(mainCat.key)"
+                  v-if="mainCat.children && expandedMobileCategories.includes(mainCat.key)"
                   class="pb-3 pl-4 space-y-1"
                 >
                   <NuxtLink
-                    v-for="subCat in getSubCategories(mainCat.key)"
+                    v-for="subCat in mainCat.children"
                     :key="subCat.key"
-                    :to="`/industry/category/${subCat.slug || subCat.key}`"
+                    :to="`/industry/category/${subCat.slug}`"
                     class="block py-2 text-sm text-slate-400"
                     @click="mobileMenuOpen = false"
                   >
@@ -208,6 +209,18 @@
               All Products
             </NuxtLink>
             
+            <!-- Cart in Mobile Menu -->
+            <button 
+              @click="mobileMenuOpen = false; openCartSidebar()"
+              class="flex items-center gap-2 text-slate-400 py-3 border-t border-slate-800 w-full"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+              </svg>
+              Cart
+              <span v-if="shopwareCartCount > 0" class="ml-auto text-blue-400 text-sm">{{ shopwareCartCount }}</span>
+            </button>
+            
             <!-- Switch Shop -->
             <NuxtLink 
               to="/" 
@@ -223,6 +236,12 @@
         </div>
       </Transition>
     </nav>
+
+    <!-- Cart Sidebar -->
+    <CheckoutCartSidebar
+      :open="cartSidebarOpen"
+      @close="cartSidebarOpen = false"
+    />
 
     <!-- Main Content -->
     <main class="pt-16">
@@ -253,7 +272,7 @@
             <h4 class="font-medium text-sm uppercase tracking-wider text-slate-400 mb-4">Categories</h4>
             <ul class="space-y-2 text-sm text-slate-500">
               <li v-for="cat in mainCategories" :key="cat.key">
-                <NuxtLink :to="`/industry/category/${cat.slug || cat.key}`" class="hover:text-white transition-colors">
+                <NuxtLink :to="`/industry/category/${cat.slug}`" class="hover:text-white transition-colors">
                   {{ cat.title }}
                 </NuxtLink>
               </li>
@@ -299,29 +318,49 @@
 </template>
 
 <script setup lang="ts">
-import client from '../.frontstack/generated-client'
+const { itemCount, initCart } = useShopwareCart()
+const { setLayout } = useShopLayout()
 
-const { items } = useCart()
-const cartCount = computed(() => items.value.length)
+// Set this layout as current when mounted
+onMounted(() => {
+  setLayout('industry')
+})
+
+// Shopware cart count
+const shopwareCartCount = computed(() => itemCount.value)
+
+// Cart sidebar state
+const cartSidebarOpen = ref(false)
+
 const scrolled = ref(false)
 const mobileMenuOpen = ref(false)
 const openCategory = ref<string | null>(null)
 const expandedMobileCategories = ref<string[]>([])
-const categoriesLoading = ref(true)
 
-// Category data
-const allCategories = ref<CategoryCard[]>([])
-const INDUSTRY_KEY = '0195609b58697ea591dab38582f3e88b'
-
-// Main categories (Level 2 under Industry)
-const mainCategories = computed(() => {
-  return allCategories.value.filter(c => c.parentKey === INDUSTRY_KEY)
-})
-
-// Get sub categories for a parent
-const getSubCategories = (parentKey: string) => {
-  return allCategories.value.filter(c => c.parentKey === parentKey)
+// Hardcoded category structure for reliability (no API calls needed)
+interface CategoryItem {
+  key: string
+  slug: string
+  title: string
+  children?: CategoryItem[]
 }
+
+const mainCategories: CategoryItem[] = [
+  {
+    key: '0195609bdfdb76f0828337e0241eab22',
+    slug: 'tools',
+    title: 'Tools',
+    children: [
+      { key: '0195609df6c973c6a3539bdf7c374ce6', slug: 'drills', title: 'Drills' }
+    ]
+  },
+  {
+    key: '0195665f95ea718a8eb3b111dddb20fc',
+    slug: 'construction-machines',
+    title: 'Construction Machines',
+    children: []
+  }
+]
 
 // Toggle mobile category expansion
 const toggleMobileCategory = (key: string) => {
@@ -333,20 +372,9 @@ const toggleMobileCategory = (key: string) => {
   }
 }
 
-// Fetch categories
-const fetchCategories = async () => {
-  try {
-    categoriesLoading.value = true
-    const response = await client.listing('AllCategories', {}, {
-      query: { limit: 48 }
-    })
-    allCategories.value = response.items || []
-    console.log('Industry categories loaded:', mainCategories.value.map(c => c.title))
-  } catch (error) {
-    console.error('Error fetching categories:', error)
-  } finally {
-    categoriesLoading.value = false
-  }
+// Open cart sidebar
+const openCartSidebar = () => {
+  cartSidebarOpen.value = true
 }
 
 onMounted(() => {
@@ -357,8 +385,8 @@ onMounted(() => {
   window.addEventListener('scroll', handleScroll)
   handleScroll()
   
-  // Fetch categories
-  fetchCategories()
+  // Initialize Shopware cart
+  initCart()
   
   onUnmounted(() => {
     window.removeEventListener('scroll', handleScroll)

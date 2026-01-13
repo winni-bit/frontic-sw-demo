@@ -202,6 +202,26 @@ definePageMeta({
 const route = useRoute()
 const slug = computed(() => route.params.slug as string)
 
+// Slug to key mapping for known categories
+const SLUG_TO_KEY: Record<string, string> = {
+  'furniture': '019560702a3d71319d2544ae6a175c2c',
+  'living-room': '01956079731972f4afc27084df43af9e',
+  'bedroom': '0195607c69c77dd4b42ba8f8c7fb1bfe',
+  'dining-room': '0195607c9f2a73758338275791a0acde',
+  'office': '0195607cb24172d3b868d3c0b481e522',
+  'sofas': '0195607a61777406a6ac3e64a88464d2',
+  'armchairs': '0195607a6d797024a36300a962535f48',
+  'coffee-tables': '0195607aef4678e39aa8975f4da1a617',
+  'beds': '0195607d0cbe7cde94e9a42d51c7f3a3',
+  'wardrobes': '0195607d1dc175f7a1010aa3d654d0a1',
+  'dining-tables': '0195607d75307790a41b82de3788bbe9',
+  'dining-chairs': '0195607d9cbe7409aa4d9e6f480eda93',
+  'industry': '0195609b58697ea591dab38582f3e88b',
+  'tools': '0195609bdfdb76f0828337e0241eab22',
+  'drills': '0195609df6c973c6a3539bdf7c374ce6',
+  'construction-machines': '0195665f95ea718a8eb3b111dddb20fc'
+}
+
 // State
 const category = ref<CategoryDetail | null>(null)
 const products = ref<ProductCard[]>([])
@@ -225,29 +245,40 @@ const debouncedSearch = () => {
   }, 300)
 }
 
-// Fetch category
+// Get category key from slug
+const getCategoryKey = (slugValue: string): string | null => {
+  // First check if it's a known slug
+  if (SLUG_TO_KEY[slugValue]) {
+    return SLUG_TO_KEY[slugValue]
+  }
+  // Check if the slug itself is a valid key (UUID format)
+  if (slugValue.length === 32 || slugValue.includes('-')) {
+    return slugValue
+  }
+  return null
+}
+
+// Fetch category directly using CategoryDetail block
 const fetchCategory = async () => {
   try {
-    // Find category by slug or key
-    const response = await client.listing('AllCategories', {}, {
-      query: {
-        filter: [
-          {
-            type: 'or',
-            filter: [
-              { type: 'equals', field: 'slug', value: slug.value },
-              { type: 'equals', field: 'key', value: slug.value }
-            ]
-          }
-        ],
-        limit: 1
-      }
-    })
+    console.log('Fetching category for slug:', slug.value)
     
-    const found = response.items?.[0]
-    if (found) {
-      category.value = await client.block('CategoryDetail', found.key)
-      return found.key
+    const categoryKey = getCategoryKey(slug.value)
+    
+    if (!categoryKey) {
+      console.warn('Unknown category slug:', slug.value)
+      error.value = true
+      return null
+    }
+    
+    console.log('Using category key:', categoryKey)
+    
+    const categoryDetail = await client.block('CategoryDetail', categoryKey)
+    
+    if (categoryDetail) {
+      console.log('Found category:', categoryDetail.title)
+      category.value = categoryDetail
+      return categoryDetail.key
     }
     
     error.value = true
@@ -300,10 +331,12 @@ const goToPage = (page: number | null) => {
 const init = async () => {
   loading.value = true
   error.value = false
+  
   const categoryKey = await fetchCategory()
   if (categoryKey) {
     await fetchProducts()
   }
+  
   loading.value = false
 }
 

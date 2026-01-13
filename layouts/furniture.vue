@@ -83,15 +83,21 @@
               </span>
             </NuxtLink>
             
-            <!-- Cart -->
-            <NuxtLink to="/cart" class="p-2 text-stone-500 hover:text-stone-900 transition-colors relative">
+            <!-- Cart - Opens Sidebar -->
+            <button 
+              @click="openCartSidebar"
+              class="p-2 text-stone-500 hover:text-stone-900 transition-colors relative"
+            >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
               </svg>
-              <span v-if="cartCount > 0" class="absolute -top-1 -right-1 w-4 h-4 bg-amber-600 text-white text-xs rounded-full flex items-center justify-center">
-                {{ cartCount }}
+              <span 
+                v-if="shopwareCartCount > 0" 
+                class="absolute -top-1 -right-1 w-4 h-4 bg-amber-600 text-white text-xs rounded-full flex items-center justify-center"
+              >
+                {{ shopwareCartCount > 9 ? '9+' : shopwareCartCount }}
               </span>
-            </NuxtLink>
+            </button>
 
             <!-- Mobile Menu -->
             <button 
@@ -168,6 +174,18 @@
               My Wishlist
               <span v-if="likeCount > 0" class="ml-auto text-rose-500 text-sm">{{ likeCount }}</span>
             </NuxtLink>
+            
+            <!-- Cart in Mobile Menu -->
+            <button 
+              @click="mobileMenuOpen = false; openCartSidebar()"
+              class="flex items-center gap-2 text-stone-700 py-2 w-full"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+              </svg>
+              Cart
+              <span v-if="shopwareCartCount > 0" class="ml-auto text-amber-600 text-sm">{{ shopwareCartCount }}</span>
+            </button>
             
             <div class="border-t border-stone-100 pt-3 mt-3">
               <NuxtLink 
@@ -322,6 +340,12 @@
       </Transition>
     </Teleport>
 
+    <!-- Cart Sidebar -->
+    <CheckoutCartSidebar
+      :open="cartSidebarOpen"
+      @close="cartSidebarOpen = false"
+    />
+
     <!-- Main Content -->
     <main class="pt-20">
       <slot />
@@ -401,9 +425,21 @@ import client from '../.frontstack/generated-client'
 
 const FURNITURE_KEY = '019560702a3d71319d2544ae6a175c2c'
 
-const { items } = useCart()
 const { likeCount } = useLikeList()
-const cartCount = computed(() => items.value.length)
+const { itemCount, initCart } = useShopwareCart()
+const { setLayout } = useShopLayout()
+
+// Set this layout as current when mounted
+onMounted(() => {
+  setLayout('furniture')
+})
+
+// Shopware cart count
+const shopwareCartCount = computed(() => itemCount.value)
+
+// Cart sidebar state
+const cartSidebarOpen = ref(false)
+
 const scrolled = ref(false)
 const mobileMenuOpen = ref(false)
 
@@ -416,6 +452,11 @@ const searchInputRef = ref<HTMLInputElement | null>(null)
 const searchDebounceTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 
 const popularSearches = ['Sofa', 'Chair', 'Table', 'Lamp', 'Bed', 'Storage']
+
+// Open cart sidebar
+const openCartSidebar = () => {
+  cartSidebarOpen.value = true
+}
 
 // Search functions
 const openSearch = () => {
@@ -524,6 +565,9 @@ onMounted(() => {
   window.addEventListener('scroll', handleScroll)
   window.addEventListener('keydown', handleKeydown)
   handleScroll()
+  
+  // Initialize Shopware cart
+  initCart()
   
   onUnmounted(() => {
     window.removeEventListener('scroll', handleScroll)

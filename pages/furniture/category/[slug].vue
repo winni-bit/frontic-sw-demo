@@ -312,6 +312,26 @@ const KNOWN_CATEGORIES: Record<string, string> = {
   '0195665f95ea718a8eb3b111dddb20fc': 'Construction Machines'
 }
 
+// Slug to key mapping for known categories
+const SLUG_TO_KEY: Record<string, string> = {
+  'furniture': '019560702a3d71319d2544ae6a175c2c',
+  'living-room': '01956079731972f4afc27084df43af9e',
+  'bedroom': '0195607c69c77dd4b42ba8f8c7fb1bfe',
+  'dining-room': '0195607c9f2a73758338275791a0acde',
+  'office': '0195607cb24172d3b868d3c0b481e522',
+  'sofas': '0195607a61777406a6ac3e64a88464d2',
+  'armchairs': '0195607a6d797024a36300a962535f48',
+  'coffee-tables': '0195607aef4678e39aa8975f4da1a617',
+  'beds': '0195607d0cbe7cde94e9a42d51c7f3a3',
+  'wardrobes': '0195607d1dc175f7a1010aa3d654d0a1',
+  'dining-tables': '0195607d75307790a41b82de3788bbe9',
+  'dining-chairs': '0195607d9cbe7409aa4d9e6f480eda93',
+  'industry': '0195609b58697ea591dab38582f3e88b',
+  'tools': '0195609bdfdb76f0828337e0241eab22',
+  'drills': '0195609df6c973c6a3539bdf7c374ce6',
+  'construction-machines': '0195665f95ea718a8eb3b111dddb20fc'
+}
+
 // State
 const category = ref<any>(null)
 const products = ref<any[]>([])
@@ -409,71 +429,51 @@ const parseSort = () => {
   }
 }
 
-// Fetch all categories to build name mapping
-const fetchAllCategoryNames = async () => {
-  try {
-    console.log('Fetching all category names...')
-    
-    const response = await client.listing('AllCategories', {}, { 
-      query: { 
-        limit: 100
-      } 
-    })
-    
-    if (response.items && response.items.length > 0) {
-      // Create a new object with all categories
-      const newNames: Record<string, string> = { ...KNOWN_CATEGORIES }
-      
-      response.items.forEach((cat: any) => {
-        if (cat.key && cat.title) {
-          newNames[cat.key] = cat.title
-        }
-      })
-      
-      // Update the ref with all names
-      categoryNames.value = newNames
-      console.log('Category names loaded:', Object.keys(categoryNames.value).length)
-    }
-  } catch (err) {
-    console.error('Error fetching category names:', err)
-    // Keep using KNOWN_CATEGORIES as fallback
+// Get category key from slug
+const getCategoryKey = (slugValue: string): string | null => {
+  // First check if it's a known slug
+  if (SLUG_TO_KEY[slugValue]) {
+    return SLUG_TO_KEY[slugValue]
   }
+  // Check if the slug itself is a valid key (UUID format)
+  if (slugValue.length === 32 || slugValue.includes('-')) {
+    return slugValue
+  }
+  return null
 }
 
-// Fetch category details
+// Fetch category details directly using CategoryDetail block
 const fetchCategory = async () => {
   try {
     console.log('Fetching category for slug:', slug.value)
     
-    const categoriesResponse = await client.listing('AllCategories', {}, {
-      query: {
-        filter: [{
-          type: 'or',
-          filter: [
-            { type: 'equals', field: 'slug', value: slug.value },
-            { type: 'equals', field: 'key', value: slug.value }
-          ]
-        }],
-        limit: 1
-      }
-    })
+    // Get the category key from the slug
+    const categoryKey = getCategoryKey(slug.value)
     
-    const foundCategory = categoriesResponse.items?.[0]
+    if (!categoryKey) {
+      console.warn('Unknown category slug:', slug.value)
+      error.value = true
+      return null
+    }
     
-    if (foundCategory) {
-      console.log('Found category:', foundCategory)
-      const categoryDetail = await client.block('CategoryDetail', foundCategory.key)
+    console.log('Using category key:', categoryKey)
+    
+    // Fetch the category detail directly
+    const categoryDetail = await client.block('CategoryDetail', categoryKey)
+    
+    if (categoryDetail) {
+      console.log('Found category:', categoryDetail.title)
       category.value = categoryDetail
       
-      // Also add this category to our names map
+      // Add to names map
       if (categoryDetail.key && categoryDetail.title) {
         categoryNames.value = { ...categoryNames.value, [categoryDetail.key]: categoryDetail.title }
       }
       
-      return foundCategory.key
+      return categoryDetail.key
     }
     
-    console.warn('Category not found for slug:', slug.value)
+    console.warn('Category not found for key:', categoryKey)
     error.value = true
     return null
   } catch (err) {
@@ -572,13 +572,9 @@ const init = async () => {
   pageLoading.value = true
   error.value = false
   
-  console.log('=== Initializing category page ==='
-  )
+  console.log('=== Initializing category page ===')
   
-  // IMPORTANT: Fetch ALL category names FIRST before anything else
-  await fetchAllCategoryNames()
-  
-  // Then fetch the current category
+  // Fetch the current category directly
   const categoryKey = await fetchCategory()
   
   if (categoryKey) {
