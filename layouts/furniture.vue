@@ -21,16 +21,19 @@
               Shop All
             </NuxtLink>
             <NuxtLink 
+              to="/3d-demo" 
+              class="text-sm text-amber-600 hover:text-amber-700 transition-colors flex items-center gap-1.5"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+              3D Demo
+            </NuxtLink>
+            <NuxtLink 
               to="/furniture/category/living-room" 
               class="text-sm text-stone-600 hover:text-stone-900 transition-colors"
             >
               Living Room
-            </NuxtLink>
-            <NuxtLink 
-              to="/furniture/category/bedroom" 
-              class="text-sm text-stone-600 hover:text-stone-900 transition-colors"
-            >
-              Bedroom
             </NuxtLink>
           </div>
 
@@ -142,6 +145,16 @@
               @click="mobileMenuOpen = false"
             >
               Shop All
+            </NuxtLink>
+            <NuxtLink 
+              to="/3d-demo" 
+              class="flex items-center gap-2 text-amber-600 py-2"
+              @click="mobileMenuOpen = false"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+              3D Demo
             </NuxtLink>
             <NuxtLink 
               to="/furniture/category/living-room" 
@@ -374,10 +387,18 @@
             </ul>
           </div>
 
-          <!-- Help -->
+          <!-- Features -->
           <div>
-            <h4 class="font-medium text-sm uppercase tracking-wider text-stone-400 mb-4">Help</h4>
+            <h4 class="font-medium text-sm uppercase tracking-wider text-stone-400 mb-4">Features</h4>
             <ul class="space-y-3 text-sm text-stone-400">
+              <li>
+                <NuxtLink to="/3d-demo" class="hover:text-white transition-colors flex items-center gap-2">
+                  <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                  3D Product Viewer
+                </NuxtLink>
+              </li>
               <li><a href="#" class="hover:text-white transition-colors">Delivery Information</a></li>
               <li><a href="#" class="hover:text-white transition-colors">Returns & Refunds</a></li>
               <li><a href="#" class="hover:text-white transition-colors">Contact Us</a></li>

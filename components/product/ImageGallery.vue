@@ -1,34 +1,47 @@
 <template>
   <div class="relative">
-    <!-- Main Image Container -->
+    <!-- Main Image/3D Container -->
     <div 
       ref="mainImageRef"
-      class="relative aspect-square bg-stone-50 overflow-hidden cursor-zoom-in"
-      @mouseenter="enableZoom"
-      @mouseleave="disableZoom"
-      @mousemove="handleMouseMove"
-      @click="openLightbox"
+      class="relative aspect-square bg-stone-50 overflow-hidden"
+      :class="{ 'cursor-zoom-in': !is3DViewActive }"
+      @mouseenter="!is3DViewActive && enableZoom()"
+      @mouseleave="!is3DViewActive && disableZoom()"
+      @mousemove="!is3DViewActive && handleMouseMove($event)"
+      @click="!is3DViewActive && openLightbox()"
     >
-      <!-- Main Image -->
-      <img
-        v-if="currentImage?.src"
-        :src="currentImage.src"
-        :alt="currentImage.altText || 'Product image'"
-        class="w-full h-full object-cover transition-transform duration-200"
-        :style="zoomStyle"
+      <!-- 3D Viewer -->
+      <ProductThreeDViewer
+        v-if="is3DViewActive && current3DModelUrl"
+        :model-url="current3DModelUrl"
+        :auto-rotate="true"
+        class="w-full h-full"
+        @loaded="on3DLoaded"
+        @error="on3DError"
       />
-      <div 
-        v-else 
-        class="w-full h-full bg-gradient-to-br from-amber-50 to-orange-100 flex items-center justify-center"
-      >
-        <svg class="w-32 h-32 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-        </svg>
-      </div>
 
-      <!-- Zoom Indicator -->
+      <!-- Main Image -->
+      <template v-else>
+        <img
+          v-if="currentImage?.src"
+          :src="currentImage.src"
+          :alt="currentImage.altText || 'Product image'"
+          class="w-full h-full object-cover transition-transform duration-200"
+          :style="zoomStyle"
+        />
+        <div 
+          v-else 
+          class="w-full h-full bg-gradient-to-br from-amber-50 to-orange-100 flex items-center justify-center"
+        >
+          <svg class="w-32 h-32 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+          </svg>
+        </div>
+      </template>
+
+      <!-- Zoom Indicator (only for images) -->
       <div 
-        v-if="!isZooming && currentImage?.src"
+        v-if="!isZooming && currentImage?.src && !is3DViewActive"
         class="absolute bottom-4 right-4 bg-white/80 backdrop-blur-sm px-3 py-2 text-xs text-stone-600 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -37,66 +50,80 @@
         Hover to zoom
       </div>
 
-      <!-- Navigation Arrows -->
-      <button
-        v-if="allImages.length > 1"
-        @click.stop="previousImage"
-        class="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 backdrop-blur-sm flex items-center justify-center text-stone-600 hover:bg-white hover:text-stone-900 transition-all opacity-0 group-hover:opacity-100"
-      >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 19l-7-7 7-7" />
-        </svg>
-      </button>
-      <button
-        v-if="allImages.length > 1"
-        @click.stop="nextImage"
-        class="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 backdrop-blur-sm flex items-center justify-center text-stone-600 hover:bg-white hover:text-stone-900 transition-all opacity-0 group-hover:opacity-100"
-      >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5l7 7-7 7" />
-        </svg>
-      </button>
+      <!-- Navigation Arrows (only for images) -->
+      <template v-if="!is3DViewActive">
+        <button
+          v-if="displayableImages.length > 1"
+          @click.stop="previousImage"
+          class="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 backdrop-blur-sm flex items-center justify-center text-stone-600 hover:bg-white hover:text-stone-900 transition-all opacity-0 group-hover:opacity-100"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <button
+          v-if="displayableImages.length > 1"
+          @click.stop="nextImage"
+          class="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 backdrop-blur-sm flex items-center justify-center text-stone-600 hover:bg-white hover:text-stone-900 transition-all opacity-0 group-hover:opacity-100"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      </template>
 
-      <!-- Image Counter -->
+      <!-- Image Counter (only for images) -->
       <div 
-        v-if="allImages.length > 1"
+        v-if="displayableImages.length > 1 && !is3DViewActive"
         class="absolute bottom-4 left-4 bg-white/80 backdrop-blur-sm px-3 py-1 text-xs text-stone-600"
       >
-        {{ currentIndex + 1 }} / {{ allImages.length }}
+        {{ currentIndex + 1 }} / {{ displayableImages.length }}
       </div>
     </div>
 
     <!-- Thumbnail Strip -->
     <div 
-      v-if="allImages.length > 1"
+      v-if="allThumbnails.length > 1"
       class="mt-4 flex gap-3 overflow-x-auto pb-2 scrollbar-hide"
     >
+      <!-- 3D Model Thumbnail(s) -->
       <button
-        v-for="(image, index) in allImages"
+        v-for="(model3d, index) in models3D"
+        :key="`3d-${model3d.key || index}`"
+        @click="select3DModel(model3d)"
+        class="relative flex-shrink-0 w-20 h-20 overflow-hidden transition-all duration-200"
+        :class="[
+          is3DViewActive && current3DModelUrl === model3d.src
+            ? 'ring-2 ring-amber-500' 
+            : 'ring-1 ring-stone-200 hover:ring-amber-400 opacity-70 hover:opacity-100'
+        ]"
+      >
+        <div class="w-full h-full bg-gradient-to-br from-amber-100 to-orange-100 flex flex-col items-center justify-center">
+          <svg class="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+          </svg>
+          <span class="text-[10px] text-amber-700 font-medium mt-1">3D</span>
+        </div>
+      </button>
+
+      <!-- Image Thumbnails -->
+      <button
+        v-for="(image, index) in displayableImages"
         :key="image.key || index"
         @click="selectImage(index)"
         class="relative flex-shrink-0 w-20 h-20 overflow-hidden transition-all duration-200"
         :class="[
-          currentIndex === index 
+          !is3DViewActive && currentIndex === index 
             ? 'ring-2 ring-stone-900' 
             : 'ring-1 ring-stone-200 hover:ring-stone-400 opacity-70 hover:opacity-100'
         ]"
       >
         <img
-          v-if="image.src && isImageFile(image)"
+          v-if="image.src"
           :src="image.thumbnailSrc || image.src"
           :alt="image.altText || `Product image ${index + 1}`"
           class="w-full h-full object-cover"
         />
-        <!-- 3D Model Indicator -->
-        <div 
-          v-else-if="is3DModel(image)"
-          class="w-full h-full bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center"
-        >
-          <svg class="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-          </svg>
-        </div>
         <div 
           v-else
           class="w-full h-full bg-stone-100 flex items-center justify-center"
@@ -108,7 +135,7 @@
       </button>
     </div>
 
-    <!-- Lightbox -->
+    <!-- Lightbox (only for images) -->
     <Teleport to="body">
       <Transition
         enter-active-class="transition-opacity duration-300"
@@ -144,7 +171,7 @@
 
             <!-- Navigation -->
             <button
-              v-if="allImages.length > 1"
+              v-if="displayableImages.length > 1"
               @click.stop="previousImage"
               class="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
             >
@@ -153,7 +180,7 @@
               </svg>
             </button>
             <button
-              v-if="allImages.length > 1"
+              v-if="displayableImages.length > 1"
               @click.stop="nextImage"
               class="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
             >
@@ -165,11 +192,11 @@
 
           <!-- Thumbnail Strip in Lightbox -->
           <div 
-            v-if="allImages.length > 1"
+            v-if="displayableImages.length > 1"
             class="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2"
           >
             <button
-              v-for="(image, index) in allImages"
+              v-for="(image, index) in displayableImages"
               :key="image.key || index"
               @click="selectImage(index)"
               class="w-16 h-16 overflow-hidden transition-all"
@@ -180,7 +207,7 @@
               ]"
             >
               <img
-                v-if="image.src && isImageFile(image)"
+                v-if="image.src"
                 :src="image.thumbnailSrc || image.src"
                 :alt="image.altText || `Product image ${index + 1}`"
                 class="w-full h-full object-cover"
@@ -190,7 +217,7 @@
 
           <!-- Counter -->
           <div class="absolute top-6 left-6 text-white/70 text-sm">
-            {{ currentIndex + 1 }} / {{ allImages.length }}
+            {{ currentIndex + 1 }} / {{ displayableImages.length }}
           </div>
 
           <!-- Keyboard hint -->
@@ -225,20 +252,58 @@ const isZooming = ref(false)
 const zoomPosition = ref({ x: 50, y: 50 })
 const lightboxOpen = ref(false)
 const mainImageRef = ref<HTMLElement | null>(null)
+const is3DViewActive = ref(false)
+const current3DModelUrl = ref<string | null>(null)
 
-// Combine cover and images, filter out non-image files for display
-const allImages = computed(() => {
+// Check if file is an image (not 3D model)
+const isImageFile = (image: MediaImage) => {
+  if (!image.mimeType && !image.src) return true
+  if (image.mimeType?.includes('gltf') || image.mimeType?.includes('glb')) return false
+  if (image.src?.endsWith('.glb') || image.src?.endsWith('.gltf')) return false
+  return true
+}
+
+// Check if file is a 3D model
+const is3DModel = (image: MediaImage) => {
+  return (
+    image.mimeType?.includes('gltf') || 
+    image.mimeType?.includes('glb') || 
+    image.mimeType === 'model/gltf-binary' ||
+    image.src?.endsWith('.glb') || 
+    image.src?.endsWith('.gltf')
+  )
+}
+
+// Get all 3D models from images
+const models3D = computed(() => {
+  const models: MediaImage[] = []
+  
+  if (props.images?.length) {
+    for (const img of props.images) {
+      if (img.src && is3DModel(img)) {
+        models.push(img)
+      }
+    }
+  }
+  
+  return models
+})
+
+// Has 3D models
+const has3DModels = computed(() => models3D.value.length > 0)
+
+// Get displayable images (excluding 3D models)
+const displayableImages = computed(() => {
   const imgs: MediaImage[] = []
   
-  // Add cover first if it exists
-  if (props.cover?.src) {
+  // Add cover first if it exists and is an image
+  if (props.cover?.src && isImageFile(props.cover)) {
     imgs.push(props.cover)
   }
   
-  // Add other images, avoiding duplicates
+  // Add other images, avoiding duplicates and 3D models
   if (props.images?.length) {
     for (const img of props.images) {
-      // Skip if it's the same as cover or if it's a 3D model
       if (img.src && img.src !== props.cover?.src && isImageFile(img)) {
         imgs.push(img)
       }
@@ -248,17 +313,12 @@ const allImages = computed(() => {
   return imgs.length > 0 ? imgs : [{ src: '', altText: 'No image' }]
 })
 
-const currentImage = computed(() => allImages.value[currentIndex.value])
+// All thumbnails (for counting)
+const allThumbnails = computed(() => {
+  return [...models3D.value, ...displayableImages.value]
+})
 
-// Check if file is an image (not 3D model)
-const isImageFile = (image: MediaImage) => {
-  if (!image.mimeType) return true // Assume image if no mimeType
-  return image.mimeType.startsWith('image/')
-}
-
-const is3DModel = (image: MediaImage) => {
-  return image.mimeType?.includes('gltf') || image.mimeType?.includes('glb') || image.src?.endsWith('.glb')
-}
+const currentImage = computed(() => displayableImages.value[currentIndex.value])
 
 // Zoom functionality
 const zoomStyle = computed(() => {
@@ -291,20 +351,27 @@ const handleMouseMove = (event: MouseEvent) => {
 
 // Navigation
 const selectImage = (index: number) => {
+  is3DViewActive.value = false
+  current3DModelUrl.value = null
   currentIndex.value = index
 }
 
+const select3DModel = (model: MediaImage) => {
+  is3DViewActive.value = true
+  current3DModelUrl.value = model.src || null
+}
+
 const nextImage = () => {
-  currentIndex.value = (currentIndex.value + 1) % allImages.value.length
+  currentIndex.value = (currentIndex.value + 1) % displayableImages.value.length
 }
 
 const previousImage = () => {
-  currentIndex.value = (currentIndex.value - 1 + allImages.value.length) % allImages.value.length
+  currentIndex.value = (currentIndex.value - 1 + displayableImages.value.length) % displayableImages.value.length
 }
 
 // Lightbox
 const openLightbox = () => {
-  if (currentImage.value?.src) {
+  if (currentImage.value?.src && !is3DViewActive.value) {
     lightboxOpen.value = true
     document.body.style.overflow = 'hidden'
   }
@@ -313,6 +380,15 @@ const openLightbox = () => {
 const closeLightbox = () => {
   lightboxOpen.value = false
   document.body.style.overflow = ''
+}
+
+// 3D Events
+const on3DLoaded = () => {
+  console.log('[ImageGallery] 3D model loaded')
+}
+
+const on3DError = (error: Error) => {
+  console.error('[ImageGallery] 3D model error:', error)
 }
 
 // Keyboard navigation
@@ -324,14 +400,36 @@ const handleKeydown = (e: KeyboardEvent) => {
   }
 }
 
+// Auto-select 3D model if available
 onMounted(() => {
   window.addEventListener('keydown', handleKeydown)
+  
+  // If there are 3D models, show the first one by default
+  if (has3DModels.value && models3D.value[0]?.src) {
+    is3DViewActive.value = true
+    current3DModelUrl.value = models3D.value[0].src
+  }
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
   document.body.style.overflow = ''
 })
+
+// Watch for prop changes
+watch(() => props.images, () => {
+  // Reset state when images change
+  currentIndex.value = 0
+  
+  // Check for 3D models
+  if (has3DModels.value && models3D.value[0]?.src) {
+    is3DViewActive.value = true
+    current3DModelUrl.value = models3D.value[0].src
+  } else {
+    is3DViewActive.value = false
+    current3DModelUrl.value = null
+  }
+}, { deep: true })
 </script>
 
 <style scoped>

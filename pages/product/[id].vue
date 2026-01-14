@@ -29,11 +29,11 @@
     <template v-else-if="product">
       <div class="py-8">
         <div class="max-w-7xl mx-auto px-6">
-          <!-- Breadcrumb with Dropdown (Furniture categories only) -->
+          <!-- Breadcrumb -->
           <UiBreadcrumbNav :breadcrumbs="breadcrumbItems" />
 
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16">
-            <!-- Image Gallery -->
+            <!-- Image Gallery with 3D Support -->
             <div class="group">
               <ProductImageGallery 
                 :cover="product.cover"
@@ -43,9 +43,20 @@
 
             <!-- Info -->
             <div class="py-4 lg:py-8">
+              <!-- 3D Available Badge -->
+              <div 
+                v-if="has3DModel" 
+                class="inline-flex items-center gap-2 bg-amber-100 text-amber-800 text-sm px-3 py-2 mb-4"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+                <span>3D View Available</span>
+              </div>
+
               <!-- Stock Warning Badge -->
               <div 
-                v-if="showLowStockWarning" 
+                v-else-if="showLowStockWarning" 
                 class="inline-flex items-center gap-2 bg-amber-100 text-amber-800 text-sm px-3 py-2 mb-4"
               >
                 <svg class="w-4 h-4 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
@@ -85,7 +96,10 @@
 
               <!-- Description -->
               <div class="prose prose-stone mb-8">
-                <p class="text-stone-600 leading-relaxed">
+                <p v-if="productDescription" class="text-stone-600 leading-relaxed">
+                  {{ productDescription }}
+                </p>
+                <p v-else class="text-stone-600 leading-relaxed">
                   Elevate your living space with this beautifully crafted piece. 
                   Designed with both style and comfort in mind, it seamlessly blends 
                   into any interior while making a statement of its own.
@@ -170,6 +184,12 @@
 
               <!-- Features -->
               <div class="border-t border-stone-100 pt-8 space-y-4">
+                <div v-if="has3DModel" class="flex items-center gap-3 text-sm">
+                  <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                  <span class="text-stone-600">Interactive 3D view available</span>
+                </div>
                 <div class="flex items-center gap-3 text-sm">
                   <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
@@ -243,21 +263,47 @@ definePageMeta({
 // Furniture parent category key - used to filter categories
 const FURNITURE_KEY = '019560702a3d71319d2544ae6a175c2c'
 
+// Frontstack API base URL for direct calls
+const FRONTSTACK_API_BASE = 'https://fetch-0eebd5295bfb29f41b79fe15097107.frontstack.dev'
+
 const route = useRoute()
 const productId = computed(() => route.params.id as string)
 
 // Like list composable
 const { isLiked, toggleLike } = useLikeList()
 
-const product = ref<ProductDetail | null>(null)
+// Extended product type with images
+interface ProductWith3DData {
+  key: string
+  name?: string
+  cover?: Media
+  price?: Price
+  images?: Media[]
+  description?: string
+  stock?: number
+}
+
+const product = ref<ProductWith3DData | null>(null)
 const productStock = ref<number | undefined>(undefined)
 const productImages = ref<Media[]>([])
+const productDescription = ref<string>('')
 const relatedProducts = ref<FurnitureProductCard[]>([])
-const furnitureCategories = ref<CategoryCard[]>([])
 const loading = ref(true)
 const error = ref(false)
 const showLikeFeedback = ref(false)
 const showCartFeedback = ref(false)
+
+// Check if product has 3D model
+const has3DModel = computed(() => {
+  if (!productImages.value?.length) return false
+  return productImages.value.some(img => 
+    img.mimeType?.includes('gltf') || 
+    img.mimeType?.includes('glb') ||
+    img.mimeType === 'model/gltf-binary' ||
+    img.src?.endsWith('.glb') ||
+    img.src?.endsWith('.gltf')
+  )
+})
 
 // Check if current product is liked
 const productIsLiked = computed(() => {
@@ -301,21 +347,13 @@ const formattedRefPrice = computed(() => {
   }).format(amount)
 })
 
-// Breadcrumb items with siblings for dropdown - ONLY Furniture categories
+// Breadcrumb items
 const breadcrumbItems = computed(() => {
-  // Build siblings list from furniture categories
-  const categorySiblings = furnitureCategories.value
-    .filter(cat => cat.title) // Only categories with titles
-    .map(cat => ({
-      label: cat.title || '',
-      href: `/category/${cat.slug || cat.key}`
-    }))
-
   const items = [
     { 
       label: 'Furniture', 
       href: '/furniture/all',
-      siblings: categorySiblings
+      siblings: []
     }
   ]
   
@@ -366,24 +404,81 @@ const handleCartError = (errorMsg: string) => {
   console.error('Cart error:', errorMsg)
 }
 
+// Fetch product with 3D data using direct API call
+const fetchProductWith3D = async (): Promise<ProductWith3DData | null> => {
+  try {
+    // Try to fetch from ProductDetail3D block (has images with 3D models)
+    const response = await $fetch(`${FRONTSTACK_API_BASE}/block/productdetail3d/${productId.value}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'fs-version': '269e5e26-8d28-4e7b-af9c-66974fe22146'
+      },
+      body: { param: {} }
+    })
+    
+    console.log('[3D] ProductDetail3D response:', response)
+    return response as ProductWith3DData
+  } catch (err) {
+    console.log('[3D] ProductDetail3D not available, trying ProductWith3D...')
+    
+    try {
+      // Fallback to ProductWith3D block
+      const response = await $fetch(`${FRONTSTACK_API_BASE}/block/productwith3d/${productId.value}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'fs-version': '269e5e26-8d28-4e7b-af9c-66974fe22146'
+        },
+        body: { param: {} }
+      })
+      
+      console.log('[3D] ProductWith3D response:', response)
+      return response as ProductWith3DData
+    } catch (err2) {
+      console.log('[3D] ProductWith3D not available either')
+      return null
+    }
+  }
+}
+
 const fetchProduct = async () => {
   try {
     loading.value = true
     error.value = false
     console.log('Fetching product:', productId.value)
     
-    // Fetch basic product detail
-    product.value = await client.block('ProductDetail', productId.value)
-    console.log('Product loaded:', product.value)
+    // First try to get product with 3D data
+    const product3D = await fetchProductWith3D()
     
-    // Try to get stock from FurnitureProductCard which has stock
-    try {
-      const detailedProduct = await client.block('FurnitureProductCard', productId.value)
-      productStock.value = detailedProduct.stock
-      console.log('Product stock:', productStock.value)
-    } catch (stockErr) {
-      console.log('Could not fetch stock info')
-      productStock.value = undefined
+    if (product3D) {
+      product.value = product3D
+      productImages.value = product3D.images || []
+      productStock.value = product3D.stock
+      productDescription.value = product3D.description || ''
+      console.log('Product with 3D loaded:', product.value)
+      console.log('Product images:', productImages.value)
+      console.log('Has 3D model:', has3DModel.value)
+    } else {
+      // Fallback to basic product detail
+      const basicProduct = await client.block('ProductDetail', productId.value)
+      product.value = basicProduct
+      productImages.value = []
+      console.log('Basic product loaded:', product.value)
+    }
+    
+    // Try to get stock from FurnitureProductCard if not already set
+    if (productStock.value === undefined) {
+      try {
+        const detailedProduct = await client.block('FurnitureProductCard', productId.value)
+        productStock.value = detailedProduct.stock
+        console.log('Product stock:', productStock.value)
+      } catch (stockErr) {
+        console.log('Could not fetch stock info')
+        productStock.value = undefined
+      }
     }
   } catch (err) {
     console.error('Error fetching product:', err)
@@ -409,42 +504,11 @@ const fetchRelatedProducts = async () => {
   }
 }
 
-// Fetch ONLY Furniture categories (filter by breadcrumb containing "Furniture")
-const fetchFurnitureCategories = async () => {
-  try {
-    const response = await client.listing('AllCategories', {}, {
-      query: { limit: 50 }
-    })
-    
-    console.log('All categories response:', response.items?.length, 'items')
-    
-    // Filter to only include Furniture categories (breadcrumb starts with "Furniture")
-    // Also exclude the root "Furniture" category itself (level 1)
-    furnitureCategories.value = (response.items || []).filter((cat) => {
-      const breadcrumb = cat.breadcrumb
-      // Check if the breadcrumb array exists and starts with "Furniture"
-      if (Array.isArray(breadcrumb) && breadcrumb.length > 0) {
-        const isFurniture = breadcrumb[0] === 'Furniture'
-        const isNotRoot = (cat.level || 0) > 1 // Exclude root category
-        return isFurniture && isNotRoot
-      }
-      return false
-    })
-    
-    console.log('Furniture categories loaded:', furnitureCategories.value.length, furnitureCategories.value.map(c => c.title))
-  } catch (err) {
-    console.error('Error fetching categories:', err)
-  }
-}
-
 // Initialize
 const init = async () => {
   await fetchProduct()
   if (!error.value) {
-    await Promise.all([
-      fetchRelatedProducts(),
-      fetchFurnitureCategories()
-    ])
+    await fetchRelatedProducts()
   }
 }
 
