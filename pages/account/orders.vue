@@ -8,7 +8,7 @@ useHead({
   title: 'Meine Bestellungen - Furniture',
 })
 
-const { fetchOrders, loading } = useShopwareAuth()
+const { fetchOrders, loading, isLoggedIn } = useShopwareAuth()
 
 const orders = ref<ShopwareOrder[]>([])
 const totalOrders = ref(0)
@@ -22,15 +22,34 @@ const totalPages = computed(() => Math.ceil(totalOrders.value / itemsPerPage))
 
 // Load orders
 const loadOrders = async (page: number = 1) => {
+  // Only load orders on client side when logged in
+  if (!import.meta.client) {
+    console.log('[Orders Page] Skipping orders load on server')
+    return
+  }
+  
+  if (!isLoggedIn.value) {
+    console.log('[Orders Page] User not logged in, skipping orders load')
+    return
+  }
+  
   error.value = null
+  console.log('[Orders Page] Loading orders for page:', page)
+  
   try {
     const response = await fetchOrders(page, itemsPerPage)
+    console.log('[Orders Page] Response received:', {
+      elements: response.elements?.length || 0,
+      total: response.total,
+      firstOrder: response.elements?.[0]?.orderNumber
+    })
+    
     orders.value = response.elements || []
     totalOrders.value = response.total || 0
     currentPage.value = page
-    console.log('Orders loaded:', orders.value.length, 'of', totalOrders.value)
+    console.log('[Orders Page] Orders loaded:', orders.value.length, 'of', totalOrders.value)
   } catch (err: any) {
-    console.error('Error loading orders:', err)
+    console.error('[Orders Page] Error loading orders:', err)
     error.value = err.message || 'Bestellungen konnten nicht geladen werden'
   }
 }
@@ -43,8 +62,13 @@ const goToPage = (page: number) => {
   }
 }
 
-// Initial load
+// Initial load - only on client
 onMounted(async () => {
+  console.log('[Orders Page] Mounted, loading orders...')
+  
+  // Small delay to ensure auth state is synchronized
+  await nextTick()
+  
   await loadOrders()
   initialLoading.value = false
 })

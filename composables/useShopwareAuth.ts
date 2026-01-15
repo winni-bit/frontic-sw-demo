@@ -24,24 +24,27 @@ export const useShopwareAuth = () => {
   const contextToken = useState<string | null>('shopware-context-token', () => null)
   const isInitialized = useState<boolean>('shopware-auth-initialized', () => false)
 
-  // Cookie for context token persistence
+  // Cookie for context token persistence - use watch: true for reactivity
   const contextTokenCookie = useCookie(CONTEXT_TOKEN_COOKIE, {
     maxAge: 60 * 60 * 24 * 30, // 30 days
     sameSite: 'lax',
+    watch: true, // Watch for changes
   })
 
   /**
-   * Get current context token (from state or cookie)
+   * Get current context token (prefer state over cookie for latest value)
    */
   const getContextToken = (): string | null => {
-    if (contextToken.value) {
+    // On client, prefer state (which gets updated immediately)
+    if (import.meta.client && contextToken.value) {
       return contextToken.value
     }
+    // Fall back to cookie
     if (contextTokenCookie.value) {
       contextToken.value = contextTokenCookie.value
       return contextTokenCookie.value
     }
-    return null
+    return contextToken.value
   }
 
   /**
@@ -49,15 +52,15 @@ export const useShopwareAuth = () => {
    */
   const saveContextToken = (token: string | null) => {
     if (token) {
+      console.log('[useShopwareAuth] Saving context token:', token.substring(0, 20) + '...')
       contextToken.value = token
       contextTokenCookie.value = token
-      console.log('[useShopwareAuth] Context token saved:', token.substring(0, 20) + '...')
+      console.log('[useShopwareAuth] Context token saved to state and cookie')
     }
   }
 
   /**
-   * Clear context token (on logout)
-   * Note: We keep the token but Shopware will dissociate it from the customer
+   * Clear context token (on logout or invalid token)
    */
   const clearContextToken = () => {
     contextToken.value = null
@@ -227,7 +230,9 @@ export const useShopwareAuth = () => {
         },
       })
       
-      console.log('[useShopwareAuth] Login API response received, context token:', getContextToken()?.substring(0, 20) + '...')
+      // The new token should be saved by onResponse callback
+      const newToken = getContextToken()
+      console.log('[useShopwareAuth] Login API response received, new context token:', newToken?.substring(0, 20) + '...')
 
       // Then fetch full customer data with addresses
       const fullCustomer = await fetchCustomer()
@@ -464,10 +469,13 @@ export const useShopwareAuth = () => {
       console.error('[useShopwareAuth] Fetch customer error:', err)
       customer.value = null
       isInitialized.value = true
-      // Don't set error for 401/403 - just means not logged in
-      if (!err.message?.includes('401') && !err.message?.includes('403')) {
-        error.value = err.message
+      
+      // If we get a 403/401, the token is invalid - clear it so we get a fresh one
+      if (err.message?.includes('403') || err.message?.includes('401') || err.message?.includes('Forbidden') || err.message?.includes('Customer is not logged in')) {
+        console.log('[useShopwareAuth] Token appears invalid, clearing it...')
+        clearContextToken()
       }
+      
       return null
     } finally {
       loading.value = false
@@ -479,11 +487,13 @@ export const useShopwareAuth = () => {
    */
   const fetchOrders = async (page: number = 1, limit: number = 10): Promise<ShopwareOrderResponse> => {
     console.log('[useShopwareAuth] Fetching orders...', { page, limit })
+    console.log('[useShopwareAuth] Current context token:', getContextToken()?.substring(0, 20) + '...')
+    
     loading.value = true
     error.value = null
 
     try {
-      const { data } = await apiCall<ShopwareOrderResponse>('order', {
+      const { data } = await apiCall<any>('order', {
         method: 'POST',
         body: {
           page,
@@ -529,18 +539,52 @@ export const useShopwareAuth = () => {
         },
       })
 
+      // Log the full response structure for debugging
+      console.log('[useShopwareAuth] Orders API raw response:', JSON.stringify(data, null, 2).substring(0, 2000))
+
+      // Shopware Store-API returns orders in different formats depending on version
+      // Handle both { orders: { elements: [...] } } and { elements: [...] } formats
+      let ordersData: ShopwareOrderResponse
+      
+      if (data.orders) {
+        // Format: { orders: { elements: [...], total: X } }
+        ordersData = {
+          elements: data.orders.elements || [],
+          total: data.orders.total || 0,
+        }
+      } else if (data.elements) {
+        // Format: { elements: [...], total: X }
+        ordersData = {
+          elements: data.elements || [],
+          total: data.total || 0,
+        }
+      } else if (Array.isArray(data)) {
+        // Format: direct array
+        ordersData = {
+          elements: data,
+          total: data.length,
+        }
+      } else {
+        // Unknown format - log and return empty
+        console.warn('[useShopwareAuth] Unknown orders response format:', Object.keys(data))
+        ordersData = {
+          elements: [],
+          total: 0,
+        }
+      }
+
       console.log('[useShopwareAuth] Orders fetched:', {
-        total: data.total,
-        ordersReturned: data.elements?.length || 0,
-        firstOrder: data.elements?.[0] ? {
-          orderNumber: data.elements[0].orderNumber,
-          orderDate: data.elements[0].orderDateTime,
-          total: data.elements[0].amountTotal,
-          state: data.elements[0].stateMachineState?.name,
+        total: ordersData.total,
+        ordersReturned: ordersData.elements?.length || 0,
+        firstOrder: ordersData.elements?.[0] ? {
+          orderNumber: ordersData.elements[0].orderNumber,
+          orderDate: ordersData.elements[0].orderDateTime,
+          total: ordersData.elements[0].amountTotal,
+          state: ordersData.elements[0].stateMachineState?.name,
         } : null,
       })
       
-      return data
+      return ordersData
     } catch (err: any) {
       console.error('[useShopwareAuth] Fetch orders error:', err)
       error.value = err.message || 'Bestellungen konnten nicht geladen werden'

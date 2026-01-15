@@ -3,16 +3,34 @@
  * 
  * Protects routes that require authentication.
  * Redirects to login page if user is not logged in.
+ * 
+ * Note: This middleware runs on both server and client.
+ * On server-side, it checks the customer state.
+ * The actual customer data is fetched client-side to ensure
+ * the latest auth state is used (avoiding cookie sync issues).
  */
 export default defineNuxtRouteMiddleware(async (to) => {
-  const { isLoggedIn, fetchCustomer, isInitialized } = useShopwareAuth()
+  const { isLoggedIn, customer, fetchCustomer, isInitialized } = useShopwareAuth()
 
-  // Initialize auth if not already done
-  if (!isInitialized.value) {
-    try {
-      await fetchCustomer()
-    } catch (err) {
-      console.log('[Auth Middleware] No logged in customer')
+  // On client-side, always fetch fresh customer data
+  if (import.meta.client) {
+    if (!isInitialized.value) {
+      try {
+        console.log('[Auth Middleware] Client: Fetching customer data...')
+        await fetchCustomer()
+      } catch (err) {
+        console.log('[Auth Middleware] Client: No logged in customer')
+      }
+    }
+  } else {
+    // On server-side, try to initialize auth
+    if (!isInitialized.value) {
+      try {
+        console.log('[Auth Middleware] Server: Attempting to fetch customer...')
+        await fetchCustomer()
+      } catch (err) {
+        console.log('[Auth Middleware] Server: No logged in customer')
+      }
     }
   }
 
@@ -27,5 +45,5 @@ export default defineNuxtRouteMiddleware(async (to) => {
     })
   }
 
-  console.log('[Auth Middleware] User is logged in, allowing access')
+  console.log('[Auth Middleware] User is logged in:', customer.value?.email)
 })
