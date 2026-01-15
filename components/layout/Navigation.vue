@@ -138,6 +138,96 @@
             </span>
           </NuxtLink>
 
+          <!-- Account Dropdown -->
+          <div 
+            class="relative"
+            @mouseenter="accountDropdownOpen = true"
+            @mouseleave="accountDropdownOpen = false"
+          >
+            <NuxtLink
+              :to="isLoggedIn ? '/account' : '/account/login'"
+              class="relative transition-colors"
+              :class="[scrolled ? 'text-stone-600 hover:text-stone-900' : 'text-white/80 hover:text-white']"
+              aria-label="Account"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              <!-- Logged in indicator -->
+              <span 
+                v-if="isLoggedIn" 
+                class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-500 rounded-full border-2"
+                :class="[scrolled ? 'border-white' : 'border-stone-900']"
+              />
+            </NuxtLink>
+
+            <!-- Account Dropdown Menu -->
+            <Transition
+              enter-active-class="transition-all duration-200 ease-out"
+              enter-from-class="opacity-0 -translate-y-2"
+              enter-to-class="opacity-100 translate-y-0"
+              leave-active-class="transition-all duration-150 ease-in"
+              leave-from-class="opacity-100 translate-y-0"
+              leave-to-class="opacity-0 -translate-y-2"
+            >
+              <div 
+                v-if="accountDropdownOpen && isLoggedIn"
+                class="absolute top-full right-0 mt-2 w-56 bg-white shadow-lg border border-stone-100"
+              >
+                <div class="py-2">
+                  <!-- Customer Name -->
+                  <div class="px-4 py-3 border-b border-stone-100">
+                    <p class="text-sm font-medium text-stone-900 truncate">{{ customerName }}</p>
+                    <p class="text-xs text-stone-500 truncate">{{ customerEmail }}</p>
+                  </div>
+
+                  <!-- Menu Items -->
+                  <NuxtLink
+                    to="/account"
+                    class="block px-4 py-3 text-sm text-stone-600 hover:text-stone-900 hover:bg-stone-50 transition-colors"
+                    @click="accountDropdownOpen = false"
+                  >
+                    <span class="flex items-center gap-3">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                      </svg>
+                      Mein Konto
+                    </span>
+                  </NuxtLink>
+
+                  <NuxtLink
+                    to="/account/orders"
+                    class="block px-4 py-3 text-sm text-stone-600 hover:text-stone-900 hover:bg-stone-50 transition-colors"
+                    @click="accountDropdownOpen = false"
+                  >
+                    <span class="flex items-center gap-3">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                      Meine Bestellungen
+                    </span>
+                  </NuxtLink>
+
+                  <!-- Divider -->
+                  <div class="border-t border-stone-100 my-2" />
+
+                  <!-- Logout -->
+                  <button
+                    @click="handleLogout"
+                    class="w-full px-4 py-3 text-sm text-stone-600 hover:text-stone-900 hover:bg-stone-50 transition-colors text-left"
+                  >
+                    <span class="flex items-center gap-3">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                      </svg>
+                      Abmelden
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </Transition>
+          </div>
+
           <!-- Cart -->
           <button 
             @click="openCartSidebar"
@@ -185,6 +275,52 @@
         class="md:hidden bg-white border-t border-stone-100"
       >
         <div class="container mx-auto px-6 py-6">
+          <!-- Account Section (Mobile) -->
+          <div class="mb-6 pb-6 border-b border-stone-100">
+            <template v-if="isLoggedIn">
+              <p class="text-xs text-stone-400 uppercase tracking-wider mb-2">Angemeldet als</p>
+              <p class="text-sm font-medium text-stone-900 mb-3">{{ customerName }}</p>
+              <div class="space-y-1">
+                <NuxtLink
+                  to="/account"
+                  class="block text-stone-600 text-sm py-2"
+                  @click="mobileMenuOpen = false"
+                >
+                  Mein Konto
+                </NuxtLink>
+                <NuxtLink
+                  to="/account/orders"
+                  class="block text-stone-600 text-sm py-2"
+                  @click="mobileMenuOpen = false"
+                >
+                  Meine Bestellungen
+                </NuxtLink>
+                <button
+                  @click="handleLogout(); mobileMenuOpen = false"
+                  class="block text-stone-600 text-sm py-2 w-full text-left"
+                >
+                  Abmelden
+                </button>
+              </div>
+            </template>
+            <template v-else>
+              <NuxtLink
+                to="/account/login"
+                class="block text-stone-900 text-sm font-medium py-2"
+                @click="mobileMenuOpen = false"
+              >
+                Anmelden
+              </NuxtLink>
+              <NuxtLink
+                to="/account/register"
+                class="block text-stone-600 text-sm py-2"
+                @click="mobileMenuOpen = false"
+              >
+                Konto erstellen
+              </NuxtLink>
+            </template>
+          </div>
+
           <!-- Categories Section -->
           <div class="mb-6">
             <p class="text-xs text-stone-400 uppercase tracking-wider mb-3">Categories</p>
@@ -402,9 +538,13 @@ const FURNITURE_KEY = '019560702a3d71319d2544ae6a175c2c'
 
 const { likeCount } = useLikeList()
 const { itemCount, initCart } = useShopwareCart()
+const { isLoggedIn, customerName, customerEmail, logout, initAuth } = useShopwareAuth()
 
 // Cart sidebar state
 const cartSidebarOpen = ref(false)
+
+// Account dropdown state
+const accountDropdownOpen = ref(false)
 
 // Use itemCount directly from composable
 const cartCount = computed(() => itemCount.value)
@@ -428,6 +568,16 @@ const popularSearches = ['Sofa', 'Chair', 'Table', 'Lamp', 'Bed', 'Storage']
 // Open cart sidebar
 const openCartSidebar = () => {
   cartSidebarOpen.value = true
+}
+
+// Handle logout
+const handleLogout = async () => {
+  try {
+    await logout()
+    accountDropdownOpen.value = false
+  } catch (err) {
+    console.error('Logout error:', err)
+  }
 }
 
 // Fetch categories for navigation
@@ -561,6 +711,9 @@ onMounted(() => {
   
   // Initialize Shopware cart
   initCart()
+  
+  // Initialize auth state
+  initAuth()
   
   onUnmounted(() => {
     window.removeEventListener('scroll', handleScroll)

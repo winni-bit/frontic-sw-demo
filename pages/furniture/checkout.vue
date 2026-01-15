@@ -14,7 +14,7 @@ useHead({
 </script>
 
 <template>
-  <CheckoutCheckoutForm
+  <CheckoutForm
     shop-base-path="/furniture"
     products-path="/furniture/all"
     confirmation-path="/furniture/order-confirmation"

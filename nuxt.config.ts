@@ -9,4 +9,22 @@ export default defineNuxtConfig({
       autoprefixer: {},
     },
   },
+  routeRules: {
+    '/**': {
+      headers: {
+        'X-Frame-Options': 'ALLOWALL',
+        'Content-Security-Policy': "frame-ancestors *"
+      }
+    }
+  },
+  nitro: {
+    routeRules: {
+      '/**': {
+        headers: {
+          'X-Frame-Options': 'ALLOWALL',
+          'Content-Security-Policy': "frame-ancestors *"
+        }
+      }
+    }
+  }
 })

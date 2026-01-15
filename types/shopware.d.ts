@@ -240,24 +240,59 @@ interface ShopwareGuestRegistration {
   acceptedDataProtection?: boolean
 }
 
-// Customer
+// Salutation
+interface ShopwareSalutation {
+  id: string
+  salutationKey: string
+  displayName: string
+  letterName: string
+  translated: {
+    displayName: string
+    letterName: string
+  }
+}
+
+// Customer (extended with all fields from API)
 interface ShopwareCustomer {
   id: string
   email: string
   guest: boolean
   firstName: string
   lastName: string
-  salutation: {
+  company?: string | null
+  title?: string | null
+  customerNumber?: string
+  birthday?: string | null
+  createdAt?: string
+  updatedAt?: string
+  lastLogin?: string | null
+  salutation?: {
     id: string
+    salutationKey: string
     displayName: string
     letterName: string
-  }
-  defaultBillingAddress: ShopwareAddress
-  defaultBillingAddressId: string
-  defaultShippingAddress: ShopwareAddress
-  defaultShippingAddressId: string
-  activeBillingAddress: ShopwareAddress
-  activeShippingAddress: ShopwareAddress
+    translated?: {
+      displayName: string
+      letterName: string
+    }
+  } | null
+  salutationId?: string
+  defaultBillingAddress?: ShopwareAddress | null
+  defaultBillingAddressId?: string
+  defaultShippingAddress?: ShopwareAddress | null
+  defaultShippingAddressId?: string
+  activeBillingAddress?: ShopwareAddress | null
+  activeShippingAddress?: ShopwareAddress | null
+  addresses?: ShopwareAddress[]
+  defaultPaymentMethodId?: string
+  defaultPaymentMethod?: ShopwarePaymentMethod | null
+  languageId?: string
+  groupId?: string
+  group?: {
+    id: string
+    name: string
+    displayGross: boolean
+  } | null
 }
 
 // Context
@@ -345,6 +380,11 @@ interface ShopwareOrder {
     cover: {
       url: string
     } | null
+    product?: {
+      cover?: {
+        url: string
+      } | null
+    } | null
   }>
   deliveries: Array<{
     id: string
@@ -372,18 +412,6 @@ interface ShopwareOrder {
   }
   billingAddress: ShopwareAddress
   addresses: ShopwareAddress[]
-}
-
-// Salutation
-interface ShopwareSalutation {
-  id: string
-  salutationKey: string
-  displayName: string
-  letterName: string
-  translated: {
-    displayName: string
-    letterName: string
-  }
 }
 
 // API Response Types
@@ -423,4 +451,65 @@ interface CheckoutFormData {
 interface OrderConfirmationData {
   order: ShopwareOrder
   timestamp: number
+}
+
+// ============================================
+// Authentication Types
+// ============================================
+
+// Login Request
+interface ShopwareLoginRequest {
+  email: string
+  password: string
+}
+
+// Login Response (returns customer on success)
+interface ShopwareLoginResponse extends ShopwareCustomer {}
+
+// Register Request (full customer registration, not guest)
+interface ShopwareRegisterRequest {
+  email: string
+  password: string
+  salutationId: string
+  firstName: string
+  lastName: string
+  storefrontUrl: string
+  acceptedDataProtection: boolean
+  billingAddress: ShopwareAddressInput
+  shippingAddress?: ShopwareAddressInput
+}
+
+// Order List Response
+interface ShopwareOrderListResponse {
+  orders: {
+    elements: ShopwareOrder[]
+    total: number
+    aggregations: Record<string, any>
+    page: number
+    limit: number
+  }
+}
+
+// Single Order Response (from POST /order endpoint)
+interface ShopwareOrderResponse {
+  elements: ShopwareOrder[]
+  total: number
+  aggregations: Record<string, any>
+}
+
+// Registration Form Data
+interface RegistrationFormData {
+  email: string
+  password: string
+  passwordConfirm: string
+  salutationId: string
+  firstName: string
+  lastName: string
+  street: string
+  zipcode: string
+  city: string
+  countryId: string
+  countryStateId?: string
+  phoneNumber?: string
+  acceptTerms: boolean
 }

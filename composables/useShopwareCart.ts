@@ -85,6 +85,11 @@ export const useShopwareCart = () => {
     const token = getContextToken()
 
     console.log(`[useShopwareCart] API Call: ${method} /api/shopware/${path}`)
+    if (token) {
+      console.log('[useShopwareCart] Using context token:', token.substring(0, 20) + '...')
+    } else {
+      console.log('[useShopwareCart] No context token available')
+    }
     if (body) {
       console.log('[useShopwareCart] Request body:', JSON.stringify(body).substring(0, 500))
     }
@@ -529,6 +534,7 @@ export const useShopwareCart = () => {
 
   /**
    * Fetch current context to check customer status
+   * Returns basic context info - use fetchCustomerWithAddresses for full customer data
    */
   const fetchContext = async () => {
     console.log('[useShopwareCart] Fetching context...')
@@ -542,6 +548,7 @@ export const useShopwareCart = () => {
         hasCustomer: !!data.customer,
         customerEmail: data.customer?.email,
         customerGuest: data.customer?.guest,
+        customerId: data.customer?.id,
         currency: data.currency?.isoCode,
         paymentMethod: data.paymentMethod?.name,
         shippingMethod: data.shippingMethod?.name,
@@ -559,6 +566,136 @@ export const useShopwareCart = () => {
   }
 
   /**
+   * Fetch customer with full address data
+   * This uses the account/customer endpoint with associations
+   */
+  const fetchCustomerWithAddresses = async (): Promise<ShopwareCustomer | null> => {
+    console.log('[useShopwareCart] Fetching customer with addresses...')
+
+    try {
+      const { data } = await apiCall<ShopwareCustomer>('account/customer', {
+        method: 'POST',
+        body: {
+          associations: {
+            defaultBillingAddress: {
+              associations: {
+                country: {},
+                countryState: {},
+              },
+            },
+            defaultShippingAddress: {
+              associations: {
+                country: {},
+                countryState: {},
+              },
+            },
+            activeBillingAddress: {
+              associations: {
+                country: {},
+                countryState: {},
+              },
+            },
+            activeShippingAddress: {
+              associations: {
+                country: {},
+                countryState: {},
+              },
+            },
+            addresses: {
+              associations: {
+                country: {},
+                countryState: {},
+              },
+            },
+            salutation: {},
+          },
+        },
+      })
+
+      console.log('[useShopwareCart] Customer with addresses loaded:', {
+        customerId: data.id,
+        email: data.email,
+        isGuest: data.guest,
+        defaultBillingAddressId: data.defaultBillingAddressId,
+        hasBillingAddress: !!data.defaultBillingAddress,
+      })
+
+      currentCustomer.value = data
+      return data
+    } catch (err: any) {
+      console.error('[useShopwareCart] Fetch customer with addresses error:', err)
+      // Return null if customer fetch fails (likely not logged in)
+      return null
+    }
+  }
+
+  /**
+   * Update customer billing address before placing order
+   * This is needed for logged-in customers who might have updated their address in the form
+   */
+  const updateBillingAddress = async (formData: CheckoutFormData, addressId: string) => {
+    console.log('[useShopwareCart] Updating billing address:', addressId)
+
+    // Get default salutation if not provided
+    let salutationId = formData.salutationId
+    if (!salutationId && salutations.value.length > 0) {
+      const notSpecified = salutations.value.find(s => 
+        s.salutationKey === 'not_specified' || 
+        s.displayName?.toLowerCase().includes('keine')
+      )
+      salutationId = notSpecified?.id || salutations.value[0].id
+    }
+
+    const addressData = {
+      salutationId,
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      street: formData.street,
+      zipcode: formData.zipcode,
+      city: formData.city,
+      countryId: formData.countryId,
+      countryStateId: formData.countryStateId || undefined,
+      phoneNumber: formData.phoneNumber || undefined,
+    }
+
+    console.log('[useShopwareCart] Address data:', JSON.stringify(addressData, null, 2))
+
+    try {
+      const { data } = await apiCall<any>(`account/address/${addressId}`, {
+        method: 'PATCH',
+        body: addressData,
+      })
+
+      console.log('[useShopwareCart] Billing address updated successfully')
+      return data
+    } catch (err: any) {
+      console.error('[useShopwareCart] Update billing address error:', err)
+      throw err
+    }
+  }
+
+  /**
+   * Set the active billing address for the order
+   */
+  const setActiveBillingAddress = async (addressId: string) => {
+    console.log('[useShopwareCart] Setting active billing address:', addressId)
+
+    try {
+      await apiCall<any>('context', {
+        method: 'PATCH',
+        body: {
+          billingAddressId: addressId,
+        },
+      })
+
+      console.log('[useShopwareCart] Active billing address set successfully')
+    } catch (err: any) {
+      console.error('[useShopwareCart] Set active billing address error:', err)
+      throw err
+    }
+  }
+
+  /**
    * Place order
    * Requires a registered customer (guest or regular) with valid billing address
    */
@@ -571,6 +708,15 @@ export const useShopwareCart = () => {
       // First, verify we have a customer in context
       const context = await fetchContext()
       
+      console.log('[useShopwareCart] Context check for order:', {
+        hasCustomer: !!context.customer,
+        customerEmail: context.customer?.email,
+        customerGuest: context.customer?.guest,
+        customerId: context.customer?.id,
+        hasBillingAddress: !!context.customer?.defaultBillingAddressId,
+        billingAddressId: context.customer?.defaultBillingAddressId,
+      })
+
       if (!context.customer) {
         throw new Error('Kein Kunde registriert. Bitte füllen Sie das Formular aus.')
       }
@@ -746,8 +892,11 @@ export const useShopwareCart = () => {
     registerGuest,
     placeOrder,
     fetchContext,
+    fetchCustomerWithAddresses,
     clearCart,
     getContextToken,
     saveContextToken,
+    updateBillingAddress,
+    setActiveBillingAddress,
   }
 }
