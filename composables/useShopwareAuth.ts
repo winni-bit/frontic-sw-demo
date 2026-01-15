@@ -13,10 +13,11 @@
 // Cookie name for context token (same as cart)
 const CONTEXT_TOKEN_COOKIE = 'sw-context-token'
 
-// Shopware storefront URL
-const STOREFRONT_URL = 'https://fulltestsw-whering.eu-core-1.shopdev.de'
-
 export const useShopwareAuth = () => {
+  // Get storefront URL from runtime config
+  const runtimeConfig = useRuntimeConfig()
+  const STOREFRONT_URL = runtimeConfig.public.shopwareStorefrontUrl
+
   // Use Nuxt's useState for global state sharing
   const customer = useState<ShopwareCustomer | null>('shopware-auth-customer', () => null)
   const loading = useState<boolean>('shopware-auth-loading', () => false)
@@ -125,6 +126,8 @@ export const useShopwareAuth = () => {
         console.error('[useShopwareAuth] Shopware errors:', JSON.stringify(shopwareErrors, null, 2))
       } else if (err.data?.message) {
         errorMessage = err.data.message
+      } else if (err.statusMessage) {
+        errorMessage = err.statusMessage
       } else if (err.message) {
         errorMessage = err.message
       }
@@ -273,6 +276,11 @@ export const useShopwareAuth = () => {
     console.log('[useShopwareAuth] Registering new customer:', formData.email)
     loading.value = true
     error.value = null
+
+    // Validate storefront URL
+    if (!STOREFRONT_URL) {
+      throw new Error('Shopware Storefront URL not configured. Please check environment variables.')
+    }
 
     const registrationData: ShopwareRegisterRequest = {
       email: formData.email,
@@ -484,10 +492,22 @@ export const useShopwareAuth = () => {
 
   /**
    * Fetch customer orders
+   * Requires the customer to be logged in (non-guest)
    */
   const fetchOrders = async (page: number = 1, limit: number = 10): Promise<ShopwareOrderResponse> => {
     console.log('[useShopwareAuth] Fetching orders...', { page, limit })
-    console.log('[useShopwareAuth] Current context token:', getContextToken()?.substring(0, 20) + '...')
+    
+    const token = getContextToken()
+    console.log('[useShopwareAuth] Current context token:', token?.substring(0, 20) + '...')
+    
+    // Verify we have a logged-in customer before fetching orders
+    if (!customer.value || customer.value.guest) {
+      console.log('[useShopwareAuth] No logged-in customer, attempting to fetch customer first...')
+      const fetchedCustomer = await fetchCustomer()
+      if (!fetchedCustomer) {
+        throw new Error('Sie müssen angemeldet sein, um Bestellungen zu sehen.')
+      }
+    }
     
     loading.value = true
     error.value = null

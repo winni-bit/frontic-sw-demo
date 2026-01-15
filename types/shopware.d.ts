@@ -494,7 +494,7 @@ interface ShopwareOrderListResponse {
 interface ShopwareOrderResponse {
   elements: ShopwareOrder[]
   total: number
-  aggregations: Record<string, any>
+  aggregations?: Record<string, any>
 }
 
 // Registration Form Data
@@ -512,4 +512,70 @@ interface RegistrationFormData {
   countryStateId?: string
   phoneNumber?: string
   acceptTerms: boolean
+}
+
+// ============================================
+// Wishlist Types
+// ============================================
+
+// Wishlist Product from Shopware
+interface ShopwareWishlistProduct {
+  id: string
+  productId: string
+  product?: {
+    id: string
+    name: string
+    productNumber?: string
+    cover?: {
+      media?: {
+        url: string
+        alt?: string
+      }
+    }
+    calculatedPrice?: {
+      unitPrice: number
+      totalPrice: number
+      quantity: number
+    }
+  }
+}
+
+// Wishlist Response from GET /customer/wishlist
+interface ShopwareWishlistResponse {
+  wishlist?: {
+    id: string
+    customerId: string
+    products?: {
+      elements?: ShopwareWishlistProduct[]
+      total?: number
+    }
+  }
+  products?: {
+    elements?: Array<{
+      id: string
+      name: string
+      productNumber?: string
+      cover?: {
+        media?: {
+          url: string
+          alt?: string
+        }
+      }
+      calculatedPrice?: {
+        unitPrice: number
+        totalPrice: number
+      }
+    }>
+    total?: number
+  }
+}
+
+// Wishlist Add Response
+interface ShopwareWishlistAddResponse {
+  success: boolean
+}
+
+// Wishlist Merge Request
+interface ShopwareWishlistMergeRequest {
+  productIds: string[]
 }

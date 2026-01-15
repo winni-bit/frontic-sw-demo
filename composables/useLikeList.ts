@@ -1,28 +1,31 @@
 /**
  * Wishlist/Like List Composable
  * 
- * Handles wishlist operations with user-based localStorage persistence:
- * - For logged-in users: Wishlist is stored per user ID
- * - For guests: Wishlist is stored with a guest key
- * - On login: Guest wishlist is merged with user wishlist
- * - On logout: User wishlist is preserved, guest wishlist is cleared
+ * Handles wishlist operations with hybrid storage:
+ * - For logged-in users: Uses Shopware Wishlist API (synced with backend)
+ * - For guests: Uses localStorage (local only)
+ * - On login: Guest wishlist is merged with Shopware wishlist
+ * - On logout: Shopware wishlist is preserved, local state is cleared
  * 
- * This approach ensures wishlist persists across sessions for logged-in users
- * without requiring Shopware Wishlist API (which may not be enabled)
+ * Shopware Wishlist API Endpoints:
+ * - GET /customer/wishlist - Get wishlist products
+ * - POST /customer/wishlist/add/{productId} - Add product to wishlist
+ * - DELETE /customer/wishlist/delete/{productId} - Remove product from wishlist
+ * - POST /customer/wishlist/merge - Merge guest wishlist with customer wishlist
  */
 
 interface LikedProduct {
   key: string
-  name: string
+  name?: string
   price?: {
-    amount: number
-    currency: string
-    precision: number
+    amount?: number
+    currency?: string
+    precision?: number
   }
   lowestPrice?: {
-    amount: number
-    currency: string
-    precision: number
+    amount?: number
+    currency?: string
+    precision?: number
   }
   cover?: {
     src?: string
@@ -30,6 +33,45 @@ interface LikedProduct {
     altText?: string
   }
   addedAt: number
+}
+
+interface ShopwareWishlistResponse {
+  wishlist?: {
+    products?: {
+      elements?: Array<{
+        id: string
+        productId: string
+        product?: {
+          id: string
+          name: string
+          cover?: {
+            media?: {
+              url: string
+            }
+          }
+          calculatedPrice?: {
+            unitPrice: number
+            totalPrice: number
+          }
+        }
+      }>
+    }
+  }
+  products?: {
+    elements?: Array<{
+      id: string
+      name: string
+      cover?: {
+        media?: {
+          url: string
+        }
+      }
+      calculatedPrice?: {
+        unitPrice: number
+        totalPrice: number
+      }
+    }>
+  }
 }
 
 const STORAGE_KEY_PREFIX = 'furniture-likes'
@@ -42,6 +84,12 @@ const isLoading = ref(false)
 const isSyncing = ref(false)
 
 export const useLikeList = () => {
+  // Get context token for API calls
+  const getContextToken = (): string | null => {
+    const token = useState<string | null>('shopware-context-token')
+    return token.value
+  }
+
   // Get current user ID from auth state
   const getCurrentUserId = (): string => {
     const customer = useState<any>('shopware-auth-customer')
@@ -51,19 +99,58 @@ export const useLikeList = () => {
     return GUEST_KEY
   }
 
-  // Check if user is logged in
+  // Check if user is logged in (non-guest)
   const isUserLoggedIn = (): boolean => {
     const customer = useState<any>('shopware-auth-customer')
     return !!customer.value && !customer.value.guest
   }
 
-  // Get storage key for current user
+  // Get storage key for current user (used for guest storage)
   const getStorageKey = (userId?: string): string => {
     const id = userId || getCurrentUserId()
     return `${STORAGE_KEY_PREFIX}-${id}`
   }
 
-  // Load wishlist from localStorage for a specific user
+  /**
+   * Make API call to Shopware proxy
+   */
+  const apiCall = async <T>(
+    path: string,
+    options: {
+      method?: string
+      body?: any
+    } = {}
+  ): Promise<T> => {
+    const { method = 'GET', body } = options
+    const token = getContextToken()
+
+    if (!token) {
+      throw new Error('No context token available')
+    }
+
+    console.log(`[useLikeList] API Call: ${method} /api/shopware/${path}`)
+
+    const headers: Record<string, string> = {
+      'sw-context-token': token
+    }
+
+    try {
+      const response = await $fetch<T>(`/api/shopware/${path}`, {
+        method: method as any,
+        body,
+        headers,
+      })
+      return response
+    } catch (err: any) {
+      console.error('[useLikeList] API Error:', err)
+      throw err
+    }
+  }
+
+  // ============================================
+  // LocalStorage Operations (for guests)
+  // ============================================
+
   const loadFromStorage = (userId?: string): LikedProduct[] => {
     if (!import.meta.client) return []
     
@@ -81,7 +168,6 @@ export const useLikeList = () => {
     return []
   }
 
-  // Save wishlist to localStorage for current user
   const saveToStorage = () => {
     if (!import.meta.client) return
     
@@ -94,7 +180,6 @@ export const useLikeList = () => {
     }
   }
 
-  // Clear guest wishlist from storage
   const clearGuestStorage = () => {
     if (!import.meta.client) return
     
@@ -107,9 +192,172 @@ export const useLikeList = () => {
     }
   }
 
+  // ============================================
+  // Shopware API Operations (for logged-in users)
+  // ============================================
+
+  /**
+   * Fetch wishlist from Shopware API
+   */
+  const fetchShopwareWishlist = async (): Promise<LikedProduct[]> => {
+    try {
+      console.log('[useLikeList] Fetching wishlist from Shopware API...')
+      
+      const response = await apiCall<ShopwareWishlistResponse>('customer/wishlist', {
+        method: 'POST',
+        body: {
+          associations: {
+            product: {
+              associations: {
+                cover: {
+                  associations: {
+                    media: {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      })
+
+      console.log('[useLikeList] Shopware wishlist response:', response)
+
+      // Parse response - handle different response formats
+      const products: LikedProduct[] = []
+      
+      // Format 1: { wishlist: { products: { elements: [...] } } }
+      if (response.wishlist?.products?.elements) {
+        for (const item of response.wishlist.products.elements) {
+          const product = item.product
+          if (product) {
+            products.push({
+              key: product.id,
+              name: product.name,
+              cover: product.cover?.media ? {
+                src: product.cover.media.url
+              } : undefined,
+              price: product.calculatedPrice ? {
+                amount: product.calculatedPrice.unitPrice * 100, // Convert to cents
+                currency: 'EUR',
+                precision: 2
+              } : undefined,
+              addedAt: Date.now()
+            })
+          }
+        }
+      }
+      
+      // Format 2: { products: { elements: [...] } }
+      if (response.products?.elements) {
+        for (const product of response.products.elements) {
+          products.push({
+            key: product.id,
+            name: product.name,
+            cover: product.cover?.media ? {
+              src: product.cover.media.url
+            } : undefined,
+            price: product.calculatedPrice ? {
+              amount: product.calculatedPrice.unitPrice * 100,
+              currency: 'EUR',
+              precision: 2
+            } : undefined,
+            addedAt: Date.now()
+          })
+        }
+      }
+
+      console.log('[useLikeList] Parsed Shopware wishlist:', products.length, 'items')
+      return products
+    } catch (err: any) {
+      // 404 means wishlist feature might not be enabled or empty
+      if (err.statusCode === 404 || err.status === 404) {
+        console.log('[useLikeList] Wishlist not found (feature may not be enabled)')
+        return []
+      }
+      console.error('[useLikeList] Error fetching Shopware wishlist:', err)
+      return []
+    }
+  }
+
+  /**
+   * Add product to Shopware wishlist
+   */
+  const addToShopwareWishlist = async (productId: string): Promise<boolean> => {
+    try {
+      console.log('[useLikeList] Adding to Shopware wishlist:', productId)
+      
+      await apiCall(`customer/wishlist/add/${productId}`, {
+        method: 'POST'
+      })
+      
+      console.log('[useLikeList] Successfully added to Shopware wishlist')
+      return true
+    } catch (err: any) {
+      // 400 might mean product already in wishlist
+      if (err.statusCode === 400 || err.status === 400) {
+        console.log('[useLikeList] Product may already be in wishlist')
+        return true
+      }
+      console.error('[useLikeList] Error adding to Shopware wishlist:', err)
+      return false
+    }
+  }
+
+  /**
+   * Remove product from Shopware wishlist
+   */
+  const removeFromShopwareWishlist = async (productId: string): Promise<boolean> => {
+    try {
+      console.log('[useLikeList] Removing from Shopware wishlist:', productId)
+      
+      await apiCall(`customer/wishlist/delete/${productId}`, {
+        method: 'DELETE'
+      })
+      
+      console.log('[useLikeList] Successfully removed from Shopware wishlist')
+      return true
+    } catch (err: any) {
+      console.error('[useLikeList] Error removing from Shopware wishlist:', err)
+      return false
+    }
+  }
+
+  /**
+   * Merge guest wishlist with Shopware wishlist
+   */
+  const mergeWishlistWithShopware = async (productIds: string[]): Promise<boolean> => {
+    if (productIds.length === 0) return true
+    
+    try {
+      console.log('[useLikeList] Merging wishlist with Shopware:', productIds.length, 'items')
+      
+      await apiCall('customer/wishlist/merge', {
+        method: 'POST',
+        body: {
+          productIds
+        }
+      })
+      
+      console.log('[useLikeList] Successfully merged wishlist with Shopware')
+      return true
+    } catch (err: any) {
+      console.error('[useLikeList] Error merging wishlist with Shopware:', err)
+      // Fall back to adding items individually
+      console.log('[useLikeList] Falling back to individual adds...')
+      for (const productId of productIds) {
+        await addToShopwareWishlist(productId)
+      }
+      return true
+    }
+  }
+
+  // ============================================
+  // Main Operations
+  // ============================================
+
   /**
    * Sync wishlist on login
-   * - Loads user's saved wishlist
+   * - Fetches Shopware wishlist
    * - Merges with any guest wishlist items
    * - Clears guest wishlist
    */
@@ -124,30 +372,42 @@ export const useLikeList = () => {
     console.log('[useLikeList] Syncing wishlist for logged-in user...')
 
     try {
-      const userId = getCurrentUserId()
-      
-      // Load user's saved wishlist
-      const userProducts = loadFromStorage(userId)
-      const userProductIds = userProducts.map(p => p.key)
-      console.log('[useLikeList] User wishlist:', userProducts.length, 'items')
-
       // Load guest wishlist (items added before login)
       const guestProducts = loadFromStorage(GUEST_KEY)
       console.log('[useLikeList] Guest wishlist:', guestProducts.length, 'items')
 
-      // Merge: Start with user products, add guest products that aren't duplicates
-      const mergedProducts = [...userProducts]
+      // If there are guest products, merge them with Shopware wishlist first
+      if (guestProducts.length > 0) {
+        const guestProductIds = guestProducts.map(p => p.key)
+        await mergeWishlistWithShopware(guestProductIds)
+      }
+
+      // Fetch the complete wishlist from Shopware
+      const shopwareProducts = await fetchShopwareWishlist()
+      console.log('[useLikeList] Shopware wishlist:', shopwareProducts.length, 'items')
+
+      // Use Shopware wishlist as source of truth
+      // But preserve local product details (name, cover, price) from guest products
+      const mergedProducts: LikedProduct[] = [...shopwareProducts]
       
-      for (const guestProduct of guestProducts) {
-        if (!userProductIds.includes(guestProduct.key)) {
-          console.log('[useLikeList] Merging guest product:', guestProduct.name)
-          mergedProducts.push(guestProduct)
+      // Enrich with guest product details if available
+      for (const mergedProduct of mergedProducts) {
+        const guestProduct = guestProducts.find(g => g.key === mergedProduct.key)
+        if (guestProduct) {
+          // Use guest product details if Shopware didn't return them
+          if (!mergedProduct.name && guestProduct.name) {
+            mergedProduct.name = guestProduct.name
+          }
+          if (!mergedProduct.cover && guestProduct.cover) {
+            mergedProduct.cover = guestProduct.cover
+          }
+          if (!mergedProduct.price && guestProduct.price) {
+            mergedProduct.price = guestProduct.price
+          }
         }
       }
 
-      // Update state and save
       likedProducts.value = mergedProducts
-      saveToStorage()
 
       // Clear guest wishlist after merge
       clearGuestStorage()
@@ -155,6 +415,8 @@ export const useLikeList = () => {
       console.log('[useLikeList] Sync complete, total items:', likedProducts.value.length)
     } catch (err) {
       console.error('[useLikeList] Error syncing wishlist:', err)
+      // Fall back to local storage
+      likedProducts.value = loadFromStorage()
     } finally {
       isSyncing.value = false
     }
@@ -162,13 +424,11 @@ export const useLikeList = () => {
 
   /**
    * Clear local state on logout
-   * User's wishlist remains in storage for next login
+   * Shopware wishlist remains on server for next login
    */
   const clearOnLogout = (): void => {
     console.log('[useLikeList] Clearing wishlist state on logout')
     likedProducts.value = []
-    // Don't clear user storage - it will be loaded on next login
-    // Clear guest storage to start fresh
     clearGuestStorage()
   }
 
@@ -176,11 +436,16 @@ export const useLikeList = () => {
   const initializeLikes = () => {
     if (isInitialized.value) return
 
-    const userId = getCurrentUserId()
-    likedProducts.value = loadFromStorage(userId)
-    isInitialized.value = true
+    if (isUserLoggedIn()) {
+      // For logged-in users, sync with Shopware
+      syncWithShopware()
+    } else {
+      // For guests, load from localStorage
+      likedProducts.value = loadFromStorage(GUEST_KEY)
+    }
     
-    console.log('[useLikeList] Initialized for', userId, 'with', likedProducts.value.length, 'items')
+    isInitialized.value = true
+    console.log('[useLikeList] Initialized with', likedProducts.value.length, 'items')
   }
 
   // Check if a product is liked
@@ -192,13 +457,33 @@ export const useLikeList = () => {
   const addLike = async (product: Omit<LikedProduct, 'addedAt'>) => {
     if (isLiked(product.key)) return
 
-    likedProducts.value.push({
-      ...product,
-      addedAt: Date.now()
-    })
-    saveToStorage()
+    isLoading.value = true
     
-    console.log('[useLikeList] Added:', product.name)
+    try {
+      // For logged-in users, add to Shopware first
+      if (isUserLoggedIn()) {
+        const success = await addToShopwareWishlist(product.key)
+        if (!success) {
+          console.error('[useLikeList] Failed to add to Shopware wishlist')
+          // Continue anyway to update local state for better UX
+        }
+      }
+
+      // Update local state
+      likedProducts.value.push({
+        ...product,
+        addedAt: Date.now()
+      })
+
+      // For guests, save to localStorage
+      if (!isUserLoggedIn()) {
+        saveToStorage()
+      }
+      
+      console.log('[useLikeList] Added:', product.name || product.key)
+    } finally {
+      isLoading.value = false
+    }
   }
 
   // Remove a product from likes
@@ -206,10 +491,30 @@ export const useLikeList = () => {
     const index = likedProducts.value.findIndex(p => p.key === productKey)
     if (index === -1) return
 
-    const removed = likedProducts.value.splice(index, 1)
-    saveToStorage()
+    isLoading.value = true
     
-    console.log('[useLikeList] Removed:', removed[0]?.name)
+    try {
+      // For logged-in users, remove from Shopware first
+      if (isUserLoggedIn()) {
+        const success = await removeFromShopwareWishlist(productKey)
+        if (!success) {
+          console.error('[useLikeList] Failed to remove from Shopware wishlist')
+          // Continue anyway to update local state for better UX
+        }
+      }
+
+      // Update local state
+      const removed = likedProducts.value.splice(index, 1)
+
+      // For guests, save to localStorage
+      if (!isUserLoggedIn()) {
+        saveToStorage()
+      }
+      
+      console.log('[useLikeList] Removed:', removed[0]?.name || productKey)
+    } finally {
+      isLoading.value = false
+    }
   }
 
   // Toggle like status
@@ -223,9 +528,27 @@ export const useLikeList = () => {
 
   // Clear all likes
   const clearAllLikes = async () => {
-    likedProducts.value = []
-    saveToStorage()
-    console.log('[useLikeList] Cleared all likes')
+    isLoading.value = true
+    
+    try {
+      // For logged-in users, remove each item from Shopware
+      if (isUserLoggedIn()) {
+        for (const product of likedProducts.value) {
+          await removeFromShopwareWishlist(product.key)
+        }
+      }
+
+      likedProducts.value = []
+
+      // For guests, clear localStorage
+      if (!isUserLoggedIn()) {
+        saveToStorage()
+      }
+      
+      console.log('[useLikeList] Cleared all likes')
+    } finally {
+      isLoading.value = false
+    }
   }
 
   // Get count of liked products

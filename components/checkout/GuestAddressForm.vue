@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * Guest Address Form
- * 
- * Address form for guest checkout with inline validation
+ * GuestAddressForm - Adressformular für Gast-Checkout
+ * Verwendet wiederverwendbare Form-Komponenten
+ * ~85 Zeilen
  */
 
 interface Props {
@@ -19,7 +19,6 @@ const {
   formData,
   errors,
   countries,
-  salutations,
   validateEmail,
   validateField,
 } = useCheckout()
@@ -51,212 +50,112 @@ const themeColors = computed(() => {
 
 <template>
   <div class="space-y-4">
-    <!-- Email with inline validation -->
-    <div>
-      <label for="email" :class="['block text-sm font-medium mb-1', themeColors.text]">
-        E-Mail-Adresse *
-      </label>
-      <div class="relative">
-        <input
-          id="email"
-          v-model="formData.email"
-          type="email"
-          autocomplete="email"
-          :disabled="disabled"
-          @blur="validateEmail"
-          :class="[
-            'w-full px-4 py-3 border transition-colors focus:outline-none focus:ring-2 pr-10',
-            themeColors.inputBg,
-            errors.email ? 'border-red-500' : themeColors.inputBorder,
-            themeColors.inputFocus,
-            themeColors.text,
-            disabled ? 'opacity-50' : ''
-          ]"
-          placeholder="ihre@email.de"
-        />
-        <!-- Validation indicator -->
-        <div v-if="formData.email && !errors.email" class="absolute right-3 top-1/2 -translate-y-1/2">
-          <svg :class="['w-5 h-5', themeColors.success]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-          </svg>
-        </div>
-      </div>
-      <p v-if="errors.email" class="mt-1 text-sm text-red-500">{{ errors.email }}</p>
-    </div>
+    <!-- Email -->
+    <CheckoutFormInput
+      id="email"
+      v-model="formData.email"
+      label="E-Mail-Adresse"
+      type="email"
+      autocomplete="email"
+      placeholder="ihre@email.de"
+      :disabled="disabled"
+      :error="errors.email"
+      :show-success="true"
+      :theme-colors="themeColors"
+      @blur="validateEmail"
+    />
 
-    <!-- Name -->
+    <!-- Name Row -->
     <div class="grid grid-cols-2 gap-4">
-      <div>
-        <label for="firstName" :class="['block text-sm font-medium mb-1', themeColors.text]">
-          Vorname *
-        </label>
-        <input
-          id="firstName"
-          v-model="formData.firstName"
-          type="text"
-          autocomplete="given-name"
-          :disabled="disabled"
-          @blur="validateField('firstName')"
-          :class="[
-            'w-full px-4 py-3 border transition-colors focus:outline-none focus:ring-2',
-            themeColors.inputBg,
-            errors.firstName ? 'border-red-500' : themeColors.inputBorder,
-            themeColors.inputFocus,
-            themeColors.text,
-            disabled ? 'opacity-50' : ''
-          ]"
-          placeholder="Max"
-        />
-        <p v-if="errors.firstName" class="mt-1 text-sm text-red-500">{{ errors.firstName }}</p>
-      </div>
-      <div>
-        <label for="lastName" :class="['block text-sm font-medium mb-1', themeColors.text]">
-          Nachname *
-        </label>
-        <input
-          id="lastName"
-          v-model="formData.lastName"
-          type="text"
-          autocomplete="family-name"
-          :disabled="disabled"
-          @blur="validateField('lastName')"
-          :class="[
-            'w-full px-4 py-3 border transition-colors focus:outline-none focus:ring-2',
-            themeColors.inputBg,
-            errors.lastName ? 'border-red-500' : themeColors.inputBorder,
-            themeColors.inputFocus,
-            themeColors.text,
-            disabled ? 'opacity-50' : ''
-          ]"
-          placeholder="Mustermann"
-        />
-        <p v-if="errors.lastName" class="mt-1 text-sm text-red-500">{{ errors.lastName }}</p>
-      </div>
+      <CheckoutFormInput
+        id="firstName"
+        v-model="formData.firstName"
+        label="Vorname"
+        autocomplete="given-name"
+        placeholder="Max"
+        :disabled="disabled"
+        :error="errors.firstName"
+        :theme-colors="themeColors"
+        @blur="validateField('firstName')"
+      />
+      <CheckoutFormInput
+        id="lastName"
+        v-model="formData.lastName"
+        label="Nachname"
+        autocomplete="family-name"
+        placeholder="Mustermann"
+        :disabled="disabled"
+        :error="errors.lastName"
+        :theme-colors="themeColors"
+        @blur="validateField('lastName')"
+      />
     </div>
 
     <!-- Street -->
-    <div>
-      <label for="street" :class="['block text-sm font-medium mb-1', themeColors.text]">
-        Straße und Hausnummer *
-      </label>
-      <input
-        id="street"
-        v-model="formData.street"
-        type="text"
-        autocomplete="street-address"
-        :disabled="disabled"
-        @blur="validateField('street')"
-        :class="[
-          'w-full px-4 py-3 border transition-colors focus:outline-none focus:ring-2',
-          themeColors.inputBg,
-          errors.street ? 'border-red-500' : themeColors.inputBorder,
-          themeColors.inputFocus,
-          themeColors.text,
-          disabled ? 'opacity-50' : ''
-        ]"
-        placeholder="Musterstraße 123"
-      />
-      <p v-if="errors.street" class="mt-1 text-sm text-red-500">{{ errors.street }}</p>
-    </div>
+    <CheckoutFormInput
+      id="street"
+      v-model="formData.street"
+      label="Straße und Hausnummer"
+      autocomplete="street-address"
+      placeholder="Musterstraße 123"
+      :disabled="disabled"
+      :error="errors.street"
+      :theme-colors="themeColors"
+      @blur="validateField('street')"
+    />
 
-    <!-- City & Zipcode -->
+    <!-- City & Zipcode Row -->
     <div class="grid grid-cols-3 gap-4">
-      <div>
-        <label for="zipcode" :class="['block text-sm font-medium mb-1', themeColors.text]">
-          PLZ *
-        </label>
-        <input
-          id="zipcode"
-          v-model="formData.zipcode"
-          type="text"
-          autocomplete="postal-code"
-          :disabled="disabled"
-          @blur="validateField('zipcode')"
-          :class="[
-            'w-full px-4 py-3 border transition-colors focus:outline-none focus:ring-2',
-            themeColors.inputBg,
-            errors.zipcode ? 'border-red-500' : themeColors.inputBorder,
-            themeColors.inputFocus,
-            themeColors.text,
-            disabled ? 'opacity-50' : ''
-          ]"
-          placeholder="12345"
-        />
-        <p v-if="errors.zipcode" class="mt-1 text-sm text-red-500">{{ errors.zipcode }}</p>
-      </div>
+      <CheckoutFormInput
+        id="zipcode"
+        v-model="formData.zipcode"
+        label="PLZ"
+        autocomplete="postal-code"
+        placeholder="12345"
+        :disabled="disabled"
+        :error="errors.zipcode"
+        :theme-colors="themeColors"
+        @blur="validateField('zipcode')"
+      />
       <div class="col-span-2">
-        <label for="city" :class="['block text-sm font-medium mb-1', themeColors.text]">
-          Stadt *
-        </label>
-        <input
+        <CheckoutFormInput
           id="city"
           v-model="formData.city"
-          type="text"
+          label="Stadt"
           autocomplete="address-level2"
-          :disabled="disabled"
-          @blur="validateField('city')"
-          :class="[
-            'w-full px-4 py-3 border transition-colors focus:outline-none focus:ring-2',
-            themeColors.inputBg,
-            errors.city ? 'border-red-500' : themeColors.inputBorder,
-            themeColors.inputFocus,
-            themeColors.text,
-            disabled ? 'opacity-50' : ''
-          ]"
           placeholder="Berlin"
+          :disabled="disabled"
+          :error="errors.city"
+          :theme-colors="themeColors"
+          @blur="validateField('city')"
         />
-        <p v-if="errors.city" class="mt-1 text-sm text-red-500">{{ errors.city }}</p>
       </div>
     </div>
 
     <!-- Country -->
-    <div>
-      <label for="country" :class="['block text-sm font-medium mb-1', themeColors.text]">
-        Land *
-      </label>
-      <select
-        id="country"
-        v-model="formData.countryId"
-        :disabled="disabled"
-        @change="validateField('countryId')"
-        :class="[
-          'w-full px-4 py-3 border transition-colors focus:outline-none focus:ring-2',
-          themeColors.inputBg,
-          errors.countryId ? 'border-red-500' : themeColors.inputBorder,
-          themeColors.inputFocus,
-          themeColors.text,
-          disabled ? 'opacity-50' : ''
-        ]"
-      >
-        <option value="">Land auswählen</option>
-        <option v-for="country in countries" :key="country.id" :value="country.id">
-          {{ country.translated?.name || country.name }}
-        </option>
-      </select>
-      <p v-if="errors.countryId" class="mt-1 text-sm text-red-500">{{ errors.countryId }}</p>
-    </div>
+    <CheckoutFormSelect
+      id="country"
+      v-model="formData.countryId"
+      label="Land"
+      :options="countries"
+      placeholder="Land auswählen"
+      :disabled="disabled"
+      :error="errors.countryId"
+      :theme-colors="themeColors"
+      @change="validateField('countryId')"
+    />
 
-    <!-- Phone -->
-    <div>
-      <label for="phone" :class="['block text-sm font-medium mb-1', themeColors.text]">
-        Telefon <span :class="themeColors.textSecondary">(optional)</span>
-      </label>
-      <input
-        id="phone"
-        v-model="formData.phoneNumber"
-        type="tel"
-        autocomplete="tel"
-        :disabled="disabled"
-        :class="[
-          'w-full px-4 py-3 border transition-colors focus:outline-none focus:ring-2',
-          themeColors.inputBg,
-          themeColors.inputBorder,
-          themeColors.inputFocus,
-          themeColors.text,
-          disabled ? 'opacity-50' : ''
-        ]"
-        placeholder="+49 123 456789"
-      />
-    </div>
+    <!-- Phone (optional) -->
+    <CheckoutFormInput
+      id="phone"
+      v-model="formData.phoneNumber"
+      label="Telefon"
+      type="tel"
+      autocomplete="tel"
+      placeholder="+49 123 456789"
+      :required="false"
+      :disabled="disabled"
+      :theme-colors="themeColors"
+    />
   </div>
 </template>

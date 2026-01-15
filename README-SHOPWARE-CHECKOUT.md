@@ -2,6 +2,26 @@
 
 Diese Integration ermöglicht einen vollständigen Guest Checkout mit der Shopware 6 Store-API.
 
+## Konfiguration
+
+### Environment Variables
+
+Die Shopware-Konfiguration erfolgt über Environment Variables. Erstelle eine `.env` Datei basierend auf `.env.example`:
+
+```bash
+cp .env.example .env
+```
+
+Folgende Variablen müssen konfiguriert werden:
+
+| Variable | Beschreibung | Beispiel |
+|----------|--------------|----------|
+| `SHOPWARE_API_URL` | Shopware Store-API URL | `https://your-shop.shopware.store/store-api` |
+| `SHOPWARE_ACCESS_KEY` | Sales Channel Access Key | `SWSC...` |
+| `SHOPWARE_STOREFRONT_URL` | Storefront URL für Registrierung | `https://your-shop.shopware.store` |
+
+> ⚠️ **Wichtig:** Die `.env` Datei sollte NIEMALS ins Git Repository committed werden!
+
 ## Architektur
 
 ### 1. Server-Side Proxy (`/api/shopware/[...path]`)
@@ -9,7 +29,7 @@ Diese Integration ermöglicht einen vollständigen Guest Checkout mit der Shopwa
 Der Proxy schützt den Sales Channel Access Key und leitet alle Anfragen an die Shopware Store-API weiter.
 
 **Features:**
-- Access Key wird serverseitig geschützt
+- Access Key wird serverseitig geschützt (via Runtime Config)
 - `sw-context-token` Header wird in beide Richtungen durchgereicht
 - Unterstützt alle HTTP-Methoden (GET, POST, PATCH, DELETE)
 
@@ -133,11 +153,7 @@ Bestellbestätigung:
 ## Wichtige Hinweise
 
 ### storefrontUrl
-Die `storefrontUrl` bei der Gast-Registrierung **MUSS** eine in Shopware konfigurierte Domain sein (nicht localhost).
-
-```typescript
-const STOREFRONT_URL = 'https://fulltestsw-whering.eu-core-1.shopdev.de'
-```
+Die `storefrontUrl` bei der Gast-Registrierung **MUSS** eine in Shopware konfigurierte Domain sein (nicht localhost). Diese wird über die Environment Variable `SHOPWARE_STOREFRONT_URL` konfiguriert.
 
 ### Context-Token Handling
 - Token wird im Cookie `sw-context-token` gespeichert (30 Tage)
@@ -168,17 +184,9 @@ sessionStorage.setItem('lastOrder', JSON.stringify({
 | `/account/register` | POST | Gast registrieren |
 | `/checkout/order` | POST | Bestellung aufgeben |
 
-## Konfiguration
+## Sicherheit
 
-Die Shopware-Konfiguration befindet sich in:
-- `server/api/shopware/[...path].ts` - API URL & Access Key
-- `composables/useShopwareCart.ts` - Storefront URL
-
-```typescript
-// server/api/shopware/[...path].ts
-const SHOPWARE_API_URL = 'https://fulltestsw-whering.eu-core-1.shopdev.de/store-api'
-const SHOPWARE_ACCESS_KEY = 'SWSCSERRTVR5EHDCQ3VWMEZNQW'
-
-// composables/useShopwareCart.ts
-const STOREFRONT_URL = 'https://fulltestsw-whering.eu-core-1.shopdev.de'
-```
+- **Access Keys** werden ausschließlich serverseitig verwendet (Runtime Config)
+- **Keine Secrets** im Client-Code oder in der Dokumentation
+- **Environment Variables** für alle sensiblen Konfigurationen
+- Die `.env` Datei ist in `.gitignore` enthalten

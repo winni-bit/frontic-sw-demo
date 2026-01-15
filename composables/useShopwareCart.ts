@@ -12,10 +12,11 @@
 // Cookie name for context token
 const CONTEXT_TOKEN_COOKIE = 'sw-context-token'
 
-// Shopware storefront URL (must be configured in Shopware)
-const STOREFRONT_URL = 'https://fulltestsw-whering.eu-core-1.shopdev.de'
-
 export const useShopwareCart = () => {
+  // Get storefront URL from runtime config
+  const runtimeConfig = useRuntimeConfig()
+  const STOREFRONT_URL = runtimeConfig.public.shopwareStorefrontUrl
+
   // Use Nuxt's useState for global state sharing across components
   const cart = useState<ShopwareCart | null>('shopware-cart', () => null)
   const loading = useState<boolean>('shopware-cart-loading', () => false)
@@ -472,6 +473,11 @@ export const useShopwareCart = () => {
    */
   const registerGuest = async (formData: CheckoutFormData) => {
     console.log('[useShopwareCart] Registering guest customer...')
+
+    // Validate storefront URL
+    if (!STOREFRONT_URL) {
+      throw new Error('Shopware Storefront URL not configured. Please check environment variables.')
+    }
 
     // Get default salutation if not provided
     let salutationId = formData.salutationId

@@ -5,11 +5,28 @@
  * - Protects the Sales Channel Access Key on the server side
  * - Passes sw-context-token header in both directions
  * - Supports all HTTP methods (GET, POST, PATCH, DELETE)
+ * 
+ * Configuration via environment variables:
+ * - SHOPWARE_API_URL: The Shopware Store-API URL
+ * - SHOPWARE_ACCESS_KEY: The Sales Channel Access Key
  */
 
 export default defineEventHandler(async (event) => {
-  const SHOPWARE_API_URL = 'https://fulltestsw-whering.eu-core-1.shopdev.de/store-api'
-  const SHOPWARE_ACCESS_KEY = 'SWSCSERRTVR5EHDCQ3VWMEZNQW'
+  // Get config from runtime config (environment variables)
+  const config = useRuntimeConfig()
+  
+  const SHOPWARE_API_URL = config.shopwareApiUrl
+  const SHOPWARE_ACCESS_KEY = config.shopwareAccessKey
+
+  // Validate configuration
+  if (!SHOPWARE_API_URL || !SHOPWARE_ACCESS_KEY) {
+    console.error('[Shopware Proxy] Missing configuration. Please set SHOPWARE_API_URL and SHOPWARE_ACCESS_KEY environment variables.')
+    throw createError({
+      statusCode: 500,
+      statusMessage: 'Shopware API not configured',
+      data: { message: 'Missing Shopware configuration. Please check environment variables.' },
+    })
+  }
 
   // Get the path from the URL (everything after /api/shopware/)
   const path = event.context.params?.path || ''

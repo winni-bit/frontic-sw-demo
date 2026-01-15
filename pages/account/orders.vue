@@ -8,7 +8,7 @@ useHead({
   title: 'Meine Bestellungen - Furniture',
 })
 
-const { fetchOrders, loading, isLoggedIn } = useShopwareAuth()
+const { fetchOrders, fetchCustomer, loading, isLoggedIn, customer, isInitialized } = useShopwareAuth()
 
 const orders = ref<ShopwareOrder[]>([])
 const totalOrders = ref(0)
@@ -22,19 +22,27 @@ const totalPages = computed(() => Math.ceil(totalOrders.value / itemsPerPage))
 
 // Load orders
 const loadOrders = async (page: number = 1) => {
-  // Only load orders on client side when logged in
+  // Only load orders on client side
   if (!import.meta.client) {
     console.log('[Orders Page] Skipping orders load on server')
     return
   }
   
-  if (!isLoggedIn.value) {
-    console.log('[Orders Page] User not logged in, skipping orders load')
-    return
-  }
-  
   error.value = null
   console.log('[Orders Page] Loading orders for page:', page)
+  console.log('[Orders Page] Auth state:', {
+    isLoggedIn: isLoggedIn.value,
+    hasCustomer: !!customer.value,
+    customerEmail: customer.value?.email,
+    isGuest: customer.value?.guest
+  })
+  
+  // Check if user is logged in
+  if (!isLoggedIn.value) {
+    console.log('[Orders Page] User not logged in, cannot load orders')
+    error.value = 'Sie müssen angemeldet sein, um Ihre Bestellungen zu sehen.'
+    return
+  }
   
   try {
     const response = await fetchOrders(page, itemsPerPage)
@@ -50,7 +58,30 @@ const loadOrders = async (page: number = 1) => {
     console.log('[Orders Page] Orders loaded:', orders.value.length, 'of', totalOrders.value)
   } catch (err: any) {
     console.error('[Orders Page] Error loading orders:', err)
-    error.value = err.message || 'Bestellungen konnten nicht geladen werden'
+    
+    // Check if it's an auth error
+    if (err.message?.includes('Forbidden') || err.message?.includes('403')) {
+      error.value = 'Sitzung abgelaufen. Bitte melden Sie sich erneut an.'
+      // Try to refresh customer data
+      console.log('[Orders Page] Attempting to refresh customer data...')
+      try {
+        await fetchCustomer()
+        if (isLoggedIn.value) {
+          // Retry loading orders
+          console.log('[Orders Page] Customer refreshed, retrying orders...')
+          const retryResponse = await fetchOrders(page, itemsPerPage)
+          orders.value = retryResponse.elements || []
+          totalOrders.value = retryResponse.total || 0
+          currentPage.value = page
+          error.value = null
+          return
+        }
+      } catch (refreshErr) {
+        console.error('[Orders Page] Failed to refresh customer:', refreshErr)
+      }
+    } else {
+      error.value = err.message || 'Bestellungen konnten nicht geladen werden'
+    }
   }
 }
 
@@ -64,13 +95,40 @@ const goToPage = (page: number) => {
 
 // Initial load - only on client
 onMounted(async () => {
-  console.log('[Orders Page] Mounted, loading orders...')
+  console.log('[Orders Page] Mounted, initializing...')
   
-  // Small delay to ensure auth state is synchronized
+  // Wait for auth to be initialized
+  if (!isInitialized.value) {
+    console.log('[Orders Page] Auth not initialized, fetching customer...')
+    await fetchCustomer()
+  }
+  
+  // Wait a tick for Vue reactivity
   await nextTick()
   
-  await loadOrders()
+  console.log('[Orders Page] Auth state after init:', {
+    isLoggedIn: isLoggedIn.value,
+    hasCustomer: !!customer.value,
+    customerEmail: customer.value?.email
+  })
+  
+  // Only load orders if logged in
+  if (isLoggedIn.value) {
+    await loadOrders()
+  } else {
+    console.log('[Orders Page] Not logged in, skipping orders load')
+    error.value = 'Sie müssen angemeldet sein, um Ihre Bestellungen zu sehen.'
+  }
+  
   initialLoading.value = false
+})
+
+// Watch for login state changes
+watch(isLoggedIn, async (newValue) => {
+  console.log('[Orders Page] Login state changed:', newValue)
+  if (newValue && !initialLoading.value) {
+    await loadOrders()
+  }
 })
 </script>
 
@@ -117,12 +175,22 @@ onMounted(async () => {
           </svg>
           <h2 class="text-lg font-medium text-stone-900 mb-2">Fehler beim Laden</h2>
           <p class="text-stone-500 mb-4">{{ error }}</p>
-          <button
-            @click="loadOrders(currentPage)"
-            class="px-4 py-2 bg-stone-900 text-white text-sm font-medium hover:bg-stone-800 transition-colors"
-          >
-            Erneut versuchen
-          </button>
+          <div class="flex flex-col sm:flex-row gap-3 justify-center">
+            <button
+              v-if="isLoggedIn"
+              @click="loadOrders(currentPage)"
+              class="px-4 py-2 bg-stone-900 text-white text-sm font-medium hover:bg-stone-800 transition-colors"
+            >
+              Erneut versuchen
+            </button>
+            <NuxtLink
+              v-else
+              to="/account/login"
+              class="px-4 py-2 bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 transition-colors"
+            >
+              Jetzt anmelden
+            </NuxtLink>
+          </div>
         </div>
 
         <!-- Empty State -->
